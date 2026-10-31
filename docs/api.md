@@ -17,36 +17,194 @@ Validation errors (`422`, code `validation_error`) list
 `{"location": [...], "message": "...", "type": "..."}` per field and never echo the
 submitted value.
 
-## Endpoints implemented in Phase 1 (unauthenticated by design)
+## Authentication
 
-### `GET|HEAD /health/live`
-Process liveness; checks no dependencies. `200 {"status": "ok"}`.
+Sessions are server-side. `POST /auth/login` sets an HttpOnly `dgi_session` cookie
+(SameSite=Strict, Secure outside development) and a readable `dgi_csrf` cookie. Every
+non-GET request must send the CSRF value in `X-CSRF-Token`. Responses from
+`/auth/login`, `/auth/mfa/*` and `/auth/password` carry a `state`:
+`authenticated`, `mfa_required`, `mfa_enrollment_required` or
+`password_change_required`; only `authenticated` sessions can call protected endpoints
+(others get `403 additional_step_required`).
 
-### `GET /health/ready`
-Readiness for traffic. `200` when all components are usable, otherwise `503` with
-the same body shape:
+Every protected endpoint checks permissions server-side (see
+`backend/app/modules/iam/catalogue.py`) and filters records by the caller's scope in
+SQL. Out-of-scope records respond `404`, indistinguishable from missing ones.
 
-```json
-{
-  "status": "ok",
-  "checked_at": "2026-10-31T10:32:26.201283+00:00",
-  "components": {
-    "database":   {"status": "ok", "latency_ms": 4.4, "reason": null},
-    "postgis":    {"status": "ok", "latency_ms": 0.8, "reason": null},
-    "migrations": {"status": "ok", "latency_ms": 7.1, "reason": null},
-    "redis":      {"status": "ok", "latency_ms": 3.5, "reason": null}
-  }
-}
-```
+## Health and metadata (unauthenticated)
 
-`reason` codes: `unreachable`, `timeout`, `schema_not_at_head`,
-`extension_missing`, `database_unavailable`, `no_pong`. Hostnames, versions and
-exception text are never returned (they are logged server-side).
+* `GET|HEAD /health/live`: liveness, no dependencies.
+* `GET /health/ready`: database, PostGIS, migration head, Redis, object storage; 503 if any is unavailable.
+* `GET /system/info`: version and configured deployment identity.
+* `GET /system/metrics`: Prometheus metrics; requires `Authorization: Bearer <METRICS_TOKEN>` and is blocked by nginx at the public edge.
 
-### `GET /system/info`
-```json
-{"application": "DG-IMEWS", "version": "0.1.0", "environment": "development",
- "deployment": {"district_name": null, "district_name_local": null,
-                "state_name": null, "state_name_local": null}}
-```
-`null` means "not configured"; the UI displays that rather than a default name.
+## Endpoint index (generated from the OpenAPI schema)
+
+92 operations.
+
+### administration
+
+| Method | Path |
+|---|---|
+| POST | `/api/v1/admin/boundaries/import` |
+| GET | `/api/v1/admin/boundary-datasets` |
+| POST | `/api/v1/admin/boundary-datasets` |
+| POST | `/api/v1/admin/categories` |
+| PATCH | `/api/v1/admin/categories/{obj_id}` |
+| GET | `/api/v1/admin/classification-rules` |
+| POST | `/api/v1/admin/classification-rules` |
+| PATCH | `/api/v1/admin/classification-rules/{obj_id}` |
+| POST | `/api/v1/admin/departments` |
+| PATCH | `/api/v1/admin/departments/{obj_id}` |
+| GET | `/api/v1/admin/risk-models` |
+| POST | `/api/v1/admin/risk-models` |
+| GET | `/api/v1/admin/sla-policies` |
+| POST | `/api/v1/admin/sla-policies` |
+| PATCH | `/api/v1/admin/sla-policies/{obj_id}` |
+| PATCH | `/api/v1/admin/sources/{obj_id}` |
+| POST | `/api/v1/admin/units/{level}` |
+| PATCH | `/api/v1/admin/units/{level}/{unit_id}` |
+
+### audit
+
+| Method | Path |
+|---|---|
+| GET | `/api/v1/audit/logs` |
+| GET | `/api/v1/audit/verify` |
+
+### auth
+
+| Method | Path |
+|---|---|
+| POST | `/api/v1/auth/login` |
+| POST | `/api/v1/auth/logout` |
+| GET | `/api/v1/auth/me` |
+| POST | `/api/v1/auth/mfa/confirm` |
+| POST | `/api/v1/auth/mfa/setup` |
+| POST | `/api/v1/auth/mfa/verify` |
+| POST | `/api/v1/auth/password` |
+
+### dashboard
+
+| Method | Path |
+|---|---|
+| GET | `/api/v1/dashboard/blocks` |
+| GET | `/api/v1/dashboard/categories` |
+| GET | `/api/v1/dashboard/clusters` |
+| GET | `/api/v1/dashboard/important` |
+| GET | `/api/v1/dashboard/recent-actions` |
+| GET | `/api/v1/dashboard/summary` |
+| GET | `/api/v1/dashboard/trends` |
+
+### early-warning
+
+| Method | Path |
+|---|---|
+| GET | `/api/v1/alerts` |
+| POST | `/api/v1/alerts/evaluate` |
+| GET | `/api/v1/alerts/{alert_id}` |
+| POST | `/api/v1/alerts/{alert_id}/actions` |
+
+### gis
+
+| Method | Path |
+|---|---|
+| GET | `/api/v1/gis/config` |
+| GET | `/api/v1/gis/layers/{level}` |
+
+### grievances
+
+| Method | Path |
+|---|---|
+| GET | `/api/v1/grievances` |
+| POST | `/api/v1/grievances` |
+| GET | `/api/v1/grievances/{grievance_id}` |
+| PATCH | `/api/v1/grievances/{grievance_id}` |
+| POST | `/api/v1/grievances/{grievance_id}/assign` |
+| POST | `/api/v1/grievances/{grievance_id}/attachments` |
+| GET | `/api/v1/grievances/{grievance_id}/attachments/{attachment_id}` |
+| POST | `/api/v1/grievances/{grievance_id}/comments` |
+| POST | `/api/v1/grievances/{grievance_id}/escalate` |
+| POST | `/api/v1/grievances/{grievance_id}/external-references` |
+| GET | `/api/v1/grievances/{grievance_id}/history` |
+| POST | `/api/v1/grievances/{grievance_id}/links` |
+| GET | `/api/v1/grievances/{grievance_id}/officers` |
+| POST | `/api/v1/grievances/{grievance_id}/transition` |
+
+### iam
+
+| Method | Path |
+|---|---|
+| GET | `/api/v1/iam/roles` |
+| GET | `/api/v1/iam/users` |
+| POST | `/api/v1/iam/users` |
+| GET | `/api/v1/iam/users/{user_id}` |
+| PATCH | `/api/v1/iam/users/{user_id}` |
+| POST | `/api/v1/iam/users/{user_id}/mfa/reset` |
+| POST | `/api/v1/iam/users/{user_id}/reset-password` |
+| PUT | `/api/v1/iam/users/{user_id}/roles` |
+| PUT | `/api/v1/iam/users/{user_id}/scopes` |
+| POST | `/api/v1/iam/users/{user_id}/unlock` |
+
+### intake
+
+| Method | Path |
+|---|---|
+| GET | `/api/v1/intake/adapters` |
+| POST | `/api/v1/intake/development-adapter/run` |
+| GET | `/api/v1/intake/imports` |
+| POST | `/api/v1/intake/imports` |
+| GET | `/api/v1/intake/imports/{batch_id}` |
+
+### intelligence
+
+| Method | Path |
+|---|---|
+| GET | `/api/v1/grievances/{grievance_id}/intelligence` |
+| POST | `/api/v1/grievances/{grievance_id}/intelligence/run` |
+| POST | `/api/v1/intelligence/classifications/{classification_id}/review` |
+| GET | `/api/v1/intelligence/clusters` |
+| POST | `/api/v1/intelligence/duplicates/{duplicate_id}/review` |
+
+### notifications
+
+| Method | Path |
+|---|---|
+| GET | `/api/v1/notifications` |
+| POST | `/api/v1/notifications/read-all` |
+| POST | `/api/v1/notifications/{notification_id}/read` |
+
+### performance
+
+| Method | Path |
+|---|---|
+| GET | `/api/v1/performance/blocks` |
+| GET | `/api/v1/performance/departments` |
+| GET | `/api/v1/performance/escalations` |
+| GET | `/api/v1/performance/snapshots` |
+
+### reference
+
+| Method | Path |
+|---|---|
+| GET | `/api/v1/reference/categories` |
+| GET | `/api/v1/reference/departments` |
+| GET | `/api/v1/reference/sources` |
+| GET | `/api/v1/reference/units/{level}` |
+
+### reports
+
+| Method | Path |
+|---|---|
+| GET | `/api/v1/reports` |
+| POST | `/api/v1/reports` |
+| GET | `/api/v1/reports/{job_id}` |
+| GET | `/api/v1/reports/{job_id}/download` |
+
+### system
+
+| Method | Path |
+|---|---|
+| GET | `/api/v1/health/live` |
+| GET | `/api/v1/health/ready` |
+| GET | `/api/v1/system/info` |

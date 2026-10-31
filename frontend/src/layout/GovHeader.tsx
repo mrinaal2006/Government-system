@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { useSystemInfo } from "@/lib/api/system";
 
 import { AccessibilityControls } from "./AccessibilityControls";
+import { UserBar } from "./UserBar";
 
 const APP_TITLE = "District Grievance Intelligence, Monitoring & Early Warning System";
 
@@ -57,6 +58,7 @@ export function GovHeader() {
               <span className="text-on-brand-muted">Deployment identity not configured</span>
             ) : null}
             {isError ? <span className="text-on-brand-muted">Deployment details unavailable</span> : null}
+            <UserBar />
           </div>
         </div>
       </div>

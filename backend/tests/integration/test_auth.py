@@ -279,3 +279,13 @@ def test_password_hashes_are_argon2id(db_session: Session) -> None:
     u = make_user(db_session, ["auditor"], mfa=False)
     h = db_session.execute(select(User.password_hash).where(User.id == u.id)).scalar_one()
     assert h.startswith("$argon2id$")
+
+
+def test_login_origin_check(client: TestClient, db_session: Session) -> None:
+    u = make_user(db_session, ["department_officer"], scopes=[{"scope_type": "assigned"}])
+    db_session.commit()
+    body = {"username": u.username, "password": PASSWORD}
+    same = client.post("/api/v1/auth/login", json=body, headers={"Origin": "http://testserver"})
+    assert same.status_code == 200
+    cross = client.post("/api/v1/auth/login", json=body, headers={"Origin": "https://evil.example"})
+    assert cross.status_code == 403 and cross.json()["error"]["code"] == "permission_denied"

@@ -394,28 +394,42 @@ def _create_demo_grievances(
         )
         gsvc.now = perf.now = real_now
         created.append(g.id)
+        # Backdate each workflow step after registration so trends look realistic (demo only).
+        step_time = [when]
+
+        def later(hours_min: int = 6, hours_max: int = 96, st: list[datetime] = step_time) -> None:
+            st[0] = min(st[0] + timedelta(hours=rng.randint(hours_min, hours_max)), real_now())
+            gsvc.now = perf.now = lambda w=st[0]: w  # type: ignore[misc]
+
         dept = dep_for_cat[cat]
         roll = rng.random()
         if days_ago < 1 or roll < 0.15:
+            gsvc.now = perf.now = real_now
             continue
         officer_id = rng.choice(dep_users[dept])
         officer = user_context(db, officer_id)
+        later()
         gsvc.assign(db, dm, g.id, officer_id, g.version, "Demo assignment", meta)
         if roll < 0.3:
             continue
+        later()
         gsvc.transition(db, officer, g.id, "start_work", g.version, None, meta)
         if roll < 0.5:
             continue
+        later()
         gsvc.transition(
             db, officer, g.id, "submit_resolution", g.version, "Demo: action taken and reported by officer.", meta
         )
         if roll < 0.6:
             continue
+        later()
         gsvc.transition(db, dm, g.id, "accept_resolution", g.version, "Demo verification", meta)
+        later()
         if roll < 0.9:
             gsvc.transition(db, dm, g.id, "close", g.version, None, meta)
         elif roll < 0.95:
             gsvc.transition(db, dm, g.id, "reopen", g.version, "Demo: complainant reports the problem persists.", meta)
+    gsvc.now = perf.now = real_now
     db.flush()
     for gid in created:
         intel.analyse(db, gid)

@@ -1,0 +1,37 @@
+# Operational alert rules. Thresholds are starting points for the operations team to tune.
+groups:
+  - name: dgimews
+    rules:
+      - alert: DependencyDown
+        expr: dgimews_component_up == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations: { summary: "{{ $labels.component }} is unavailable" }
+      - alert: ApiDown
+        expr: up{job="dgimews-api"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations: { summary: "The API is not responding to metric scrapes" }
+      - alert: HighServerErrorRate
+        expr: sum(rate(dgimews_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(dgimews_http_requests_total[5m])), 1) > 0.02
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "More than 2% of API requests are failing" }
+      - alert: SlowApi
+        expr: histogram_quantile(0.95, sum by (le) (rate(dgimews_http_request_seconds_bucket[5m]))) > 2
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "API p95 latency above 2 seconds" }
+      - alert: TaskBacklog
+        expr: dgimews_celery_queue_length > 500
+        for: 15m
+        labels: { severity: warning }
+        annotations: { summary: "Background task queue is backing up (workers down or overloaded)" }
+      - alert: RepeatedLoginFailures
+        expr: sum(increase(dgimews_http_requests_total{route="/api/v1/auth/login", status=~"401|423|429"}[15m])) > 50
+        labels: { severity: warning }
+        annotations: { summary: "Unusual number of failed sign-ins (possible brute-force attempt)" }
+      - alert: ReportJobsFailing
+        expr: dgimews_report_jobs_failed_24h > 5
+        labels: { severity: warning }
+        annotations: { summary: "Report generation is failing repeatedly" }

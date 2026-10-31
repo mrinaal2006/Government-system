@@ -23,20 +23,62 @@ export const READY_OK = {
   },
 };
 
+export const DM_PERMISSIONS = [
+  "grievance.read", "grievance.create", "grievance.update", "grievance.assign", "grievance.work", "grievance.verify",
+  "grievance.reopen", "grievance.escalate", "grievance.comment", "grievance.attach", "grievance.link", "citizen.read",
+  "ai.read", "ai.review", "alert.read", "alert.act", "gis.read", "gis.read_precise", "dashboard.read", "performance.read",
+  "report.generate", "report.export", "audit.read", "iam.users.read", "system.read",
+];
+export const OFFICER_PERMISSIONS = ["grievance.read", "grievance.work", "grievance.comment", "grievance.attach", "citizen.read", "ai.read", "system.read"];
+
+export function session(permissions: string[] = DM_PERMISSIONS, roles = ["district_magistrate"], state = "authenticated") {
+  return { state, user: { id: "u1", username: "test.user", full_name: "Test Officer", roles, permissions, mfa_enrolled: true } };
+}
+
 export function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
 }
 
-type Routes = Record<string, () => Response | Promise<Response>>;
+type Routes = Record<string, (url: URL, init?: RequestInit) => Response | Promise<Response>>;
 
-/** Stub fetch by URL path. Unknown paths fail loudly so tests never hit a network. */
-export function mockApi(routes: Routes) {
-  const fn = vi.fn(async (input: RequestInfo | URL) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    const path = new URL(url, "http://localhost").pathname;
-    const handler = routes[path];
-    if (!handler) throw new Error(`Unmocked API call: ${path}`);
-    return handler();
+const EMPTY_PAGE = { items: [], total: 0, limit: 25, offset: 0 };
+
+/** Defaults so pages render; tests override what they assert on. Unknown paths fail loudly. */
+export function defaultRoutes(perms: string[] = DM_PERMISSIONS): Routes {
+  return {
+    "/api/v1/auth/me": () => jsonResponse(session(perms)),
+    "/api/v1/system/info": () => jsonResponse(SYSTEM_INFO),
+    "/api/v1/health/ready": () => jsonResponse(READY_OK),
+    "/api/v1/notifications": () => jsonResponse({ items: [], total: 0, unread: 0 }),
+    "/api/v1/dashboard/summary": () => jsonResponse({ generated_at: "2026-10-31T06:30:00+00:00", kpis: [
+      { key: "total", label: "Total grievances", value: 12, filter: {} },
+      { key: "overdue", label: "Overdue", value: 3, filter: { overdue: true } },
+    ] }),
+    "/api/v1/dashboard/trends": () => jsonResponse({ series: [] }),
+    "/api/v1/dashboard/blocks": () => jsonResponse([]),
+    "/api/v1/dashboard/categories": () => jsonResponse([]),
+    "/api/v1/dashboard/clusters": () => jsonResponse([]),
+    "/api/v1/dashboard/important": () => jsonResponse([]),
+    "/api/v1/dashboard/recent-actions": () => jsonResponse([]),
+    "/api/v1/performance/departments": () => jsonResponse([]),
+    "/api/v1/grievances": () => jsonResponse(EMPTY_PAGE),
+    "/api/v1/reference/sources": () => jsonResponse([{ id: "s1", code: "MANUAL", name_en: "Manual submission", is_active: true }]),
+    "/api/v1/reference/departments": () => jsonResponse([]),
+    "/api/v1/reference/categories": () => jsonResponse([]),
+    "/api/v1/reference/units/districts": () => jsonResponse([]),
+    "/api/v1/reference/units/blocks": () => jsonResponse([]),
+    "/api/v1/reference/units/municipalities": () => jsonResponse([]),
+  };
+}
+
+export function mockApi(routes: Routes = {}, perms?: string[]) {
+  const all = { ...defaultRoutes(perms), ...routes };
+  const fn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const raw = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    const url = new URL(raw, "http://localhost");
+    const handler = all[url.pathname];
+    if (!handler) throw new Error(`Unmocked API call: ${url.pathname}`);
+    return handler(url, init);
   });
   vi.stubGlobal("fetch", fn);
   return fn;

@@ -67,12 +67,19 @@ def create_superadmin(username: str, full_name: str) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     configure_logging(get_settings())
+    import logging
+
+    for h in logging.getLogger().handlers:  # keep stdout clean for data streams (export-objects)
+        if isinstance(h, logging.StreamHandler):
+            h.setStream(sys.stderr)
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser("create-superadmin")
     p.add_argument("--username", required=True)
     p.add_argument("--full-name", required=True)
     sub.add_parser("load-demo-data", help="DEVELOPMENT ONLY: load clearly labelled synthetic demo data")
+    sub.add_parser("export-objects", help="Write all stored objects as a tar stream to stdout (backup)")
+    sub.add_parser("import-objects", help="Read a tar stream from stdin into object storage (restore)")
     t = sub.add_parser("demo-totp", help="DEVELOPMENT ONLY: print the current TOTP code of a demo.* account")
     t.add_argument("username")
     args = parser.parse_args(argv)
@@ -82,6 +89,10 @@ def main(argv: list[str] | None = None) -> int:
         from app.demo import load_demo_data
 
         return int(load_demo_data())
+    if args.command in ("export-objects", "import-objects"):
+        from app import backup
+
+        return backup.export_objects() if args.command == "export-objects" else backup.import_objects()
     if args.command == "demo-totp":
         from app.demo import demo_totp
 

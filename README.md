@@ -1,26 +1,17 @@
 # DG-IMEWS: District Grievance Intelligence, Monitoring & Early Warning System
 
 A platform for a District Magistrate's office to consolidate public grievances from
-multiple channels, monitor resolution and department performance, and surface
-emerging administrative risks early. AI assists authorised officers; it never
-closes, rejects or disposes of a grievance.
+multiple channels, manage their resolution with full accountability, monitor department
+performance, and detect emerging administrative problems early. AI assists officers with
+explainable suggestions; it never closes, rejects or disposes of a grievance.
 
-**Status: Phase 1 (foundation) complete.** See [docs/phase-1-report.md](docs/phase-1-report.md).
-There is no authentication yet (Phase 2), so do not expose this deployment beyond a
-trusted development network.
+**Status:** Phases 1-10 implemented and tested. See [docs/phase-reports.md](docs/phase-reports.md).
+Before production use: load verified master data, approve the provisional risk model and role
+permissions, and commission independent security and accessibility audits.
 
-## Stack
+## Run it locally (with synthetic demo data)
 
-| Layer | Technology |
-|---|---|
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS 4, React Router, TanStack Query |
-| Backend | Python 3.13, FastAPI, SQLAlchemy 2.0, Pydantic 2, Alembic |
-| Data | PostgreSQL 16 + PostGIS 3.4, Redis 7.4 |
-| Background | Celery 5 (Redis broker) |
-| Edge | nginx (unprivileged), strict CSP |
-| Tests | Pytest, Vitest + Testing Library + axe-core, Playwright + axe |
-
-## Quick start (development)
+Requires Docker with Compose v2, Python 3 and Node 22 (Node only for the frontend tests).
 
 ```bash
 ./scripts/init-dev-env.sh
@@ -30,43 +21,41 @@ trusted development network.
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
 
-Then open http://127.0.0.1:8080 and check **System status**. Run every check with:
-
 ```bash
-./scripts/verify.sh
+docker compose exec api python -m app.cli load-demo-data
 ```
 
-## Repository layout
+Open **http://localhost:8080** and sign in with an account printed by the last command (for
+example `demo.dm`, `demo.officer.water1`, `demo.deo`). Accounts that require MFA print a TOTP
+secret to add to any authenticator app, or get the current code with
+`docker compose exec api python -m app.cli demo-totp demo.dm`.
+All demo records are synthetic and labelled `[DEMO]`; the demo loader refuses to run outside
+development. Behind a TLS-inspecting proxy, build with `./scripts/build-images.sh` (see
+docs/development.md).
 
-```
-backend/                 FastAPI modular monolith + Celery worker
-  app/core/              config, logging, errors, middleware
-  app/db/                declarative base, conventions, sessions
-  app/modules/<module>/  12 domain modules + system (see docs/architecture.md)
-  app/worker/            Celery app and tasks
-  alembic/               migrations
-  tests/unit|integration pytest suites
-frontend/                React application
-  src/design-system/     accessible component library + contrast tests
-  src/layout/            government application shell
-  e2e/                   Playwright tests (full stack)
-infra/nginx/             web tier config + Dockerfile
-infra/postgres/init/     superuser init: roles, extensions
-scripts/                 init-dev-env, build-images, verify
-docs/                    architecture, database, configuration, API, ADRs, reports
-```
+## What it does
+
+| Area | Highlights |
+|---|---|
+| Identity and access | Argon2id, server-side sessions, CSRF, TOTP MFA, lockout, rate limits, suspicious sign-in alerts, 9 roles, area-based scopes enforced in SQL |
+| Grievances | Immutable references, state machine with separation of duties, assignments, notes, scanned attachments, links, duplicates, encrypted complainant data |
+| Intake | CSV/XLSX import with provenance and duplicate prevention; adapter interface for future authorised live integrations |
+| Intelligence | Rule-based, explainable category/department/location suggestions, summaries, duplicate candidates, clusters, versioned risk scoring, all reviewed by officers |
+| Early warning | Six indicators (overdue backlog, repeated reopenings, area concentration, essential services, escalations, volume spikes) with reasons, evidence and recommended actions |
+| GIS | PostGIS layers from registered boundary datasets only; precision limited by role |
+| Performance | SLA policies, automatic breach escalation, department and block metrics, daily snapshots |
+| Dashboard and reports | Live KPIs that open their records, trends, PDF/XLSX reports, deterministic executive summary |
+| Operations | Audit hash chain, Prometheus metrics and alerts, encrypted backup/restore (drill passed), TLS production profile |
 
 ## Documentation
 
-* [Architecture and module boundaries](docs/architecture.md)
-* [Database design](docs/database.md)
-* [Configuration reference](docs/configuration.md)
-* [Development guide](docs/development.md)
-* [API reference](docs/api.md)
-* [Architecture decision records](docs/adr/)
+[Architecture](docs/architecture.md) · [Database](docs/database.md) · [API](docs/api.md) ·
+[Configuration](docs/configuration.md) · [Development](docs/development.md) ·
+[Testing](docs/testing.md) · [Deployment](docs/deployment.md) · [Operations](docs/operations.md) ·
+[Security](docs/security.md) · [Integrations](docs/integrations.md) · [User guide](docs/user-guide.md) ·
+[ADRs](docs/adr/) · [Phase reports](docs/phase-reports.md)
 
 ## Compliance note
 
-The design uses GIGW 3.0, WCAG 2.1 AA, OWASP ASVS, CERT-In directions and the DPDP
-Act as baselines. **No certification or legal compliance is claimed**: that
-requires independent assessment.
+GIGW 3.0, WCAG 2.1 AA, OWASP ASVS, CERT-In directions and the DPDP Act are design
+baselines. **No certification or legal compliance is claimed**; that requires independent assessment.

@@ -97,6 +97,9 @@ def metrics(request: Request, s: Annotated[Settings, Depends(get_app_settings)])
     supplied = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
     if not token or not hmac.compare_digest(token, supplied):
         raise PermissionDeniedError()
+    from app.core.metrics import refresh_gauges
+
+    refresh_gauges()
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 

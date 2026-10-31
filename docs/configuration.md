@@ -45,6 +45,34 @@ contain `*`, if `LOG_LEVEL=DEBUG`, or if `DEPLOYMENT_DISTRICT_NAME` is unset.
 | `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | `localhost` / `6379` / — | |
 | `REDIS_CACHE_DB` / `REDIS_BROKER_DB` / `REDIS_RESULT_DB` | `0` / `1` / `2` | Separate logical DBs |
 
+## Authentication and sessions
+
+| Variable | Default | Description |
+|---|---|---|
+| `SESSION_COOKIE_SECURE` | unset | Unset = Secure everywhere except development/test; `false` is refused in production |
+| `SESSION_ABSOLUTE_TIMEOUT_MINUTES` / `SESSION_IDLE_TIMEOUT_MINUTES` | `720` / `30` | |
+| `LOGIN_RATE_LIMIT_PER_MINUTE` | `10` | Per IP and per username |
+| `LOCKOUT_THRESHOLD` / `LOCKOUT_MINUTES` | `5` / `15` | |
+| `PASSWORD_MIN_LENGTH` | `12` | |
+| `MFA_REQUIRED_ROLES` | `super_admin,district_magistrate,additional_district_magistrate,auditor` | |
+| `MFA_ISSUER` | `DG-IMEWS` | Label shown in authenticator apps |
+
+## Data protection, storage and scanning
+
+| Variable | Description |
+|---|---|
+| `DATA_ENCRYPTION_KEY` | Encrypts complainant data and MFA secrets. Back up separately; loss is unrecoverable |
+| `DATA_ENCRYPTION_PREVIOUS_KEYS` | Comma-separated old keys kept readable during rotation |
+| `LOOKUP_HMAC_KEY` | Keyed hash for matching mobile numbers without decrypting |
+| `STORAGE_ENDPOINT` / `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` / `STORAGE_BUCKET` / `STORAGE_REGION` / `STORAGE_SECURE` | S3-compatible private storage |
+| `UPLOAD_MAX_BYTES` | Attachment size limit (default 10 MB) |
+| `MALWARE_SCANNER` | `clamav` (required in production) or `none` (development) |
+| `CLAMAV_HOST` / `CLAMAV_PORT` | clamd address |
+| `GRIEVANCE_REFERENCE_PREFIX` | Reference format `PREFIX/YEAR/NNNNNN` |
+| `MAP_TILE_URL` | Optional basemap tile URL; leave unset to draw boundaries only (no third-party requests). If set, also add the tile origin to `img-src` in `infra/nginx/security-headers.conf` |
+| `METRICS_TOKEN` | Bearer token for `/api/v1/system/metrics` |
+| `GARAGE_RPC_SECRET` / `GARAGE_ADMIN_TOKEN` | Garage storage node secrets (compose only) |
+
 ## Compose-only variables (`.env`)
 
 | Variable | Description |

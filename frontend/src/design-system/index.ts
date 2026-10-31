@@ -1,10 +1,17 @@
 export { Alert, type Tone } from "./Alert";
 export { Breadcrumbs, type Crumb } from "./Breadcrumbs";
 export { Button, type ButtonProps, type ButtonVariant } from "./Button";
+export { Chart, type Series } from "./Chart";
+export { Checkbox } from "./Checkbox";
 export { cn } from "./cn";
 export { DataTable, type Column, type DataTableProps, type SortDirection } from "./DataTable";
+export { DescriptionList } from "./DescriptionList";
+export { Dialog } from "./Dialog";
 export { SelectField, TextAreaField, TextField, type SelectOption } from "./FormField";
+export { KpiTile } from "./KpiTile";
 export { PageHeader } from "./PageHeader";
+export { Pagination } from "./Pagination";
 export { Panel } from "./Panel";
 export { StatusBadge } from "./StatusBadge";
 export { EmptyState, ErrorState, LoadingState } from "./States";
+export { Tabs, type TabItem } from "./Tabs";

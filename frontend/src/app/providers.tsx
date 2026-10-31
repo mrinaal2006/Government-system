@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import { AccessibilityPreferencesProvider } from "@/lib/a11y/preferences";
+import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { ApiError } from "@/lib/api/client";
 
 export function createQueryClient(): QueryClient {
@@ -19,7 +20,9 @@ export function createQueryClient(): QueryClient {
 export function AppProviders({ client, children }: { client: QueryClient; children: ReactNode }) {
   return (
     <QueryClientProvider client={client}>
-      <AccessibilityPreferencesProvider>{children}</AccessibilityPreferencesProvider>
+      <AuthProvider>
+        <AccessibilityPreferencesProvider>{children}</AccessibilityPreferencesProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

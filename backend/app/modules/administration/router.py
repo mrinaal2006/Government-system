@@ -287,6 +287,15 @@ class UnitIn(BaseModel):
 def create_unit(level: UnitLevel, body: UnitIn, request: Request, cu: Manager, db: DbDep) -> dict[str, Any]:
     model, _ = UNIT_MODELS[level]
     data = {k: v for k, v in body.model_dump().items() if hasattr(model, k) and v is not None}
+    if level == "villages" and body.gram_panchayat_id:
+        # Derive parents from the reference hierarchy instead of trusting client input.
+        gp = db.get(GramPanchayat, body.gram_panchayat_id)
+        block = db.get(Block, gp.block_id) if gp else None
+        if gp is None or block is None:
+            raise AppError("Unknown gram panchayat.", code="unknown_location")
+        data.update(block_id=block.id, district_id=block.district_id)
+        if block.subdivision_id:
+            data["subdivision_id"] = block.subdivision_id
     if level == "wards":
         data["name_en"] = body.name_en
     obj = model(**data)
