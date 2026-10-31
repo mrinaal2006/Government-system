@@ -131,3 +131,15 @@ def test_blank_optional_booleans_mean_default(env: pytest.MonkeyPatch) -> None:
     s = Settings()
     assert s.session_cookie_secure is None and s.cookies_secure is False  # development default
     assert s.expose_api_docs is None
+
+
+def test_redis_tls_urls(env: pytest.MonkeyPatch) -> None:
+    s = Settings(redis_password="secret", redis_host="r.example", redis_tls=True)  # type: ignore[arg-type]
+    assert s.celery_broker_url == "rediss://:secret@r.example:6379/1?ssl_cert_reqs=required"
+    assert Settings(redis_host="r").redis_cache_url.startswith("redis://")
+
+
+def test_malware_scan_mode_validated(env: pytest.MonkeyPatch) -> None:
+    assert Settings(malware_scan_mode="deferred").malware_scan_mode == "deferred"
+    with pytest.raises(ValidationError):
+        Settings(malware_scan_mode="sometimes")  # type: ignore[arg-type]

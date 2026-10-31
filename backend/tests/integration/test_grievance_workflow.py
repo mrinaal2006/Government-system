@@ -627,3 +627,54 @@ def test_cluster_recompute_and_evaluate_endpoint(world: World, db_session: Sessi
     assert r.status_code == 200, r.text
     clusters = dm.get("/api/v1/intelligence/clusters").json()
     assert any(c["unit_id"] == str(world.geo["village"]) for c in clusters)
+
+
+def test_deferred_malware_scan_holds_files_until_clean(
+    world: World, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MALWARE_SCAN_MODE=deferred: upload is pending, undownloadable until the worker marks it clean;
+    an infected file is deleted from storage, audited and the uploader notified."""
+    from app.core.config import get_settings
+    from app.infra import malware, storage
+    from app.modules.grievances import service as gsvc
+    from app.modules.grievances.models import GrievanceAttachment
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "malware_scanner", "clamav")
+    monkeypatch.setattr(settings, "malware_scan_mode", "deferred")
+    monkeypatch.setattr(gsvc, "enqueue_attachment_scan", lambda _id: None)  # worker driven explicitly below
+    deo = world.client("deo")
+    gid = register(deo, world)["id"]
+
+    def upload() -> str:
+        r = deo.post(f"/api/v1/grievances/{gid}/attachments", files={"file": ("p.png", PNG, "image/png")})
+        assert r.status_code == 201 and r.json()["scan_status"] == "pending", r.text
+        return r.json()["id"]
+
+    clean_id, bad_id = upload(), upload()
+    assert deo.get(f"/api/v1/grievances/{gid}/attachments/{clean_id}").status_code == 403
+
+    verdicts = {clean_id: malware.ScanResult("clean"), bad_id: malware.ScanResult("infected", "Test-Signature")}
+    for att_id, verdict in verdicts.items():
+        monkeypatch.setattr(malware, "scan", lambda _data, v=verdict: v)
+        with db_session.begin():
+            assert gsvc.scan_pending_attachment(db_session, uuid.UUID(att_id)) == verdict.status
+
+    assert deo.get(f"/api/v1/grievances/{gid}/attachments/{clean_id}").content == PNG
+    assert deo.get(f"/api/v1/grievances/{gid}/attachments/{bad_id}").status_code == 403
+    bad = db_session.get(GrievanceAttachment, uuid.UUID(bad_id))
+    assert bad is not None and bad.scan_status == "infected"
+    with pytest.raises(Exception, match=r"NoSuchKey|not exist|Not Found"):
+        storage.get_bytes(bad.storage_key)
+    assert db_session.execute(
+        select(Notification).where(Notification.user_id == world.users["deo"].id, Notification.category == "security")
+    ).first()
+    # Scanner outage keeps the file pending and raises so the task is retried.
+    db_session.commit()
+    third = upload()
+    monkeypatch.setattr(malware, "scan", lambda _d: malware.ScanResult("error", "down"))
+    with pytest.raises(RuntimeError), db_session.begin():
+        gsvc.scan_pending_attachment(db_session, uuid.UUID(third))
+    db_session.expire_all()
+    third_row = db_session.get(GrievanceAttachment, uuid.UUID(third))
+    assert third_row is not None and third_row.scan_status == "pending"

@@ -53,6 +53,10 @@ def get_bytes(key: str) -> bytes:
     return b"".join(get_stream(key))
 
 
+def delete(key: str) -> None:
+    client().remove_object(get_settings().storage_bucket, key)
+
+
 def ping() -> bool:
     try:
         return client().bucket_exists(get_settings().storage_bucket)

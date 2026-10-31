@@ -49,6 +49,21 @@ def process_import(batch_id: str) -> str:
     return status
 
 
+@celery_app.task(
+    name="attachments.scan",
+    autoretry_for=(LookupError, RuntimeError),
+    retry_backoff=True,
+    retry_backoff_max=600,
+    max_retries=8,
+)
+def scan_attachment(attachment_id: str) -> str:
+    """Deferred malware scan (MALWARE_SCAN_MODE=deferred)."""
+    from app.modules.grievances import service
+
+    with _tx() as db:
+        return service.scan_pending_attachment(db, uuid.UUID(attachment_id))
+
+
 @celery_app.task(name="reports.generate")
 def generate_report(job_id: str) -> str:
     from app.modules.reports import service
@@ -94,8 +109,8 @@ def performance_snapshot() -> int:
 
 @celery_app.task(name="system.sweep")
 def sweep() -> dict[str, int]:
-    """Pick up imports and reports whose queue message was lost."""
-    from app.modules.grievances.models import ImportBatch
+    """Pick up imports, reports and attachment scans whose queue message was lost."""
+    from app.modules.grievances.models import GrievanceAttachment, ImportBatch
     from app.modules.reports.models import ReportJob
 
     cutoff = datetime.now(UTC) - timedelta(minutes=2)
@@ -110,8 +125,18 @@ def sweep() -> dict[str, int]:
                 select(ReportJob.id).where(ReportJob.status == "queued", ReportJob.created_at < cutoff)
             ).scalars()
         )
+    with _tx() as db:
+        pending = list(
+            db.execute(
+                select(GrievanceAttachment.id).where(
+                    GrievanceAttachment.scan_status == "pending", GrievanceAttachment.uploaded_at < cutoff
+                )
+            ).scalars()
+        )
+    for a in pending:
+        scan_attachment.delay(str(a))
     for i in imports:
         process_import.delay(str(i))
     for r in reports:
         generate_report.delay(str(r))
-    return {"imports": len(imports), "reports": len(reports)}
+    return {"imports": len(imports), "reports": len(reports), "attachment_scans": len(pending)}

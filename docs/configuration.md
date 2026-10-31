@@ -45,6 +45,7 @@ contain `*`, if `LOG_LEVEL=DEBUG`, or if `DEPLOYMENT_DISTRICT_NAME` is unset.
 |---|---|---|
 | `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | `localhost` / `6379` / — | |
 | `REDIS_CACHE_DB` / `REDIS_BROKER_DB` / `REDIS_RESULT_DB` | `0` / `1` / `2` | Separate logical DBs |
+| `REDIS_TLS` | `false` | Use `rediss://` with certificate verification (managed Redis) |
 
 ## Authentication and sessions
 
@@ -69,6 +70,7 @@ contain `*`, if `LOG_LEVEL=DEBUG`, or if `DEPLOYMENT_DISTRICT_NAME` is unset.
 | `UPLOAD_MAX_BYTES` | Attachment size limit (default 10 MB) |
 | `MALWARE_SCANNER` | `clamav` (required in production) or `none` (development) |
 | `CLAMAV_HOST` / `CLAMAV_PORT` | clamd address |
+| `MALWARE_SCAN_MODE` | `inline` (API scans before accepting; default) or `deferred` (worker scans after upload; file unavailable until clean). Use `deferred` on Vercel |
 | `GRIEVANCE_REFERENCE_PREFIX` | Reference format `PREFIX/YEAR/NNNNNN` |
 | `MAP_TILE_URL` | Optional basemap tile URL; leave unset to draw boundaries only (no third-party requests). If set, also add the tile origin to `img-src` in `infra/nginx/security-headers.conf` |
 | `METRICS_TOKEN` | Bearer token for `/api/v1/system/metrics` |

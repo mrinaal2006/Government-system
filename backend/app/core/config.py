@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 from enum import StrEnum
 from functools import lru_cache
-from typing import Annotated, Self
+from typing import Annotated, Literal, Self
 from urllib.parse import quote
 
 from pydantic import Field, SecretStr, field_validator, model_validator
@@ -96,6 +96,7 @@ class Settings(BaseSettings):
     redis_broker_db: int = 1
     redis_result_db: int = 2
     redis_socket_timeout_seconds: float = 2.0
+    redis_tls: bool = False  # rediss:// with certificate verification (managed Redis services)
 
     # --- Health checks ---------------------------------------------------------------
     health_check_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
@@ -140,6 +141,11 @@ class Settings(BaseSettings):
     malware_scanner: str = "none"  # "clamav" or "none" (none is refused in production)
     clamav_host: str = "clamav"
     clamav_port: int = 3310
+    # "inline": the API scans before accepting the upload (needs clamd reachable from the API).
+    # "deferred": the upload is stored as "pending" and a background worker scans it; it cannot
+    # be downloaded until marked clean. Use deferred where the API cannot reach clamd privately
+    # (for example on Vercel).
+    malware_scan_mode: Literal["inline", "deferred"] = "inline"
 
     # --- Grievances --------------------------------------------------------------------
     grievance_reference_prefix: str = "DGI"
@@ -271,6 +277,8 @@ class Settings(BaseSettings):
         auth = ""
         if self.redis_password.get_secret_value():
             auth = f":{quote(self.redis_password.get_secret_value(), safe='')}@"
+        if self.redis_tls:
+            return f"rediss://{auth}{self.redis_host}:{self.redis_port}/{db}?ssl_cert_reqs=required"
         return f"redis://{auth}{self.redis_host}:{self.redis_port}/{db}"
 
     @property

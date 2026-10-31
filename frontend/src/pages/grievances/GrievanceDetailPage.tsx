@@ -63,6 +63,14 @@ const TRANSITION_LABELS: Record<string, string> = {
   close: "Close grievance",
   reopen: "Reopen",
 };
+const SCAN_TONE: Record<string, "success" | "warning" | "info" | "danger"> = { clean: "success", not_scanned: "warning", pending: "info" };
+const SCAN_LABEL: Record<string, string> = {
+  clean: "Clean",
+  not_scanned: "Not scanned (development)",
+  pending: "Scanning, available shortly",
+  infected: "Rejected: malware detected (file deleted)",
+  error: "Scan failed",
+};
 const NOTE_REQUIRED = new Set(["submit_resolution", "return_resolution", "reopen"]);
 
 export function GrievanceDetailPage() {
@@ -275,7 +283,7 @@ function Files({ id, h }: { id: string; h: History | undefined }) {
           { key: "f", header: "File", render: (a) => (a.scan_status === "clean" || a.scan_status === "not_scanned"
             ? <a href={`${API_BASE}/grievances/${id}/attachments/${a.id}`} download>{a.filename}</a> : a.filename) },
           { key: "s", header: "Size", render: (a) => formatBytes(a.size_bytes) },
-          { key: "scan", header: "Malware scan", render: (a) => <StatusBadge tone={a.scan_status === "clean" ? "success" : a.scan_status === "not_scanned" ? "warning" : "danger"}>{a.scan_status === "not_scanned" ? "Not scanned (development)" : titleCase(a.scan_status)}</StatusBadge> },
+          { key: "scan", header: "Malware scan", render: (a) => <StatusBadge tone={SCAN_TONE[a.scan_status] ?? "danger"}>{SCAN_LABEL[a.scan_status] ?? titleCase(a.scan_status)}</StatusBadge> },
           { key: "u", header: "Uploaded", render: (a) => formatShortIST(a.uploaded_at) },
         ]} />
       <Panel title="External references">
@@ -378,7 +386,10 @@ function AttachDialog({ open, id, onClose, onDone, onError }: { open: boolean; i
         setBusy(true);
         const fd = new FormData();
         fd.append("file", file);
-        try { await apiSend("POST", `/grievances/${id}/attachments`, fd); onDone("File uploaded."); } catch (ex) { onError(ex); onClose(); } finally { setBusy(false); }
+        try {
+          const r = await apiSend<{ scan_status: string }>("POST", `/grievances/${id}/attachments`, fd);
+          onDone(r.scan_status === "pending" ? "File uploaded. It can be opened once the malware scan finishes." : "File uploaded.");
+        } catch (ex) { onError(ex); onClose(); } finally { setBusy(false); }
       }}>
         <label htmlFor="attachment-file" className="block font-semibold">File</label>
         <p id="attachment-hint" className="m-0 text-sm text-ink-muted">PDF, PNG or JPEG, up to 10 MB. Files are scanned for malware.</p>

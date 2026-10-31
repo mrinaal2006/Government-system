@@ -678,7 +678,8 @@ def upload_attachment(
             "Only PDF, PNG and JPEG files are accepted, and the file extension must match its content.",
             code="file_type_not_allowed",
         )
-    result = malware.scan(data)
+    deferred = settings.malware_scanner == "clamav" and settings.malware_scan_mode == "deferred"
+    result = malware.ScanResult("pending", "Queued for malware scan") if deferred else malware.scan(data)
     if result.status == "infected":
         audit.record_independent(
             action="grievance.attachment_rejected",
@@ -718,7 +719,52 @@ def upload_attachment(
         details={"attachment_id": str(att.id), "sha256": att.sha256, "scan": result.status},
         meta=meta,
     )
+    if deferred:
+        enqueue_attachment_scan(att.id)
     return att
+
+
+def enqueue_attachment_scan(attachment_id: uuid.UUID) -> None:
+    """Queue a deferred scan. The short delay lets the upload transaction commit first;
+    the periodic sweep re-queues anything whose message was lost."""
+    try:
+        from app.worker.tasks import scan_attachment
+
+        scan_attachment.apply_async(args=[str(attachment_id)], countdown=3)
+    except Exception:  # noqa: BLE001 - picked up by system.sweep
+        logger.warning("attachment_scan_enqueue_failed", extra={"attachment_id": str(attachment_id)})
+
+
+def scan_pending_attachment(db: Session, attachment_id: uuid.UUID) -> str:
+    """Worker side of deferred scanning. Returns the resulting scan status."""
+    att = db.get(GrievanceAttachment, attachment_id, with_for_update=True)
+    if att is None:
+        raise LookupError("attachment not visible yet")  # retried: upload may not have committed
+    if att.scan_status != "pending":
+        return att.scan_status
+    result = malware.scan(storage.get_bytes(att.storage_key))
+    if result.status == "error":
+        raise RuntimeError(f"malware scan unavailable: {result.detail}")  # retried later
+    att.scan_status, att.scan_detail = result.status, result.detail
+    if result.status == "infected":
+        storage.delete(att.storage_key)
+        notify(
+            db,
+            att.uploaded_by,
+            "security",
+            f"Attachment {att.filename} was rejected",
+            "The malware scanner detected a threat. The file has been deleted.",
+            f"/grievances/{att.grievance_id}",
+        )
+    audit.record(
+        db,
+        action="grievance.attachment_scanned",
+        outcome="denied" if result.status == "infected" else "success",
+        resource_type="grievance",
+        resource_id=att.grievance_id,
+        details={"attachment_id": str(att.id), "scan": result.status, "signature": result.detail},
+    )
+    return att.scan_status
 
 
 def attachment_for_download(

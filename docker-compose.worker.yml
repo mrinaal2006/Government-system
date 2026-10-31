@@ -1,0 +1,120 @@
+# Background services for the Vercel deployment (Option B), run on one small Linux server.
+#
+# Vercel hosts the website and API; this file runs everything that needs a long-running
+# process: the Celery worker (imports, reports, AI suggestions, deferred malware scans),
+# the scheduler (time-limit checks, alert evaluation, snapshots), ClamAV and migrations.
+# It connects to the same managed PostgreSQL, Redis and S3 storage as the Vercel API.
+#
+#   cp .env.worker.example .env.worker      # fill in every value
+#   docker compose -f docker-compose.worker.yml --env-file .env.worker --profile migrate run --rm migrate
+#   docker compose -f docker-compose.worker.yml --env-file .env.worker up -d --build
+#
+# See docs/vercel.md.
+
+name: dgimews-worker
+
+x-backend-env: &backend-env
+  APP_ENV: production
+  LOG_FORMAT: json
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  DEPLOYMENT_DISTRICT_NAME: ${DEPLOYMENT_DISTRICT_NAME:?set DEPLOYMENT_DISTRICT_NAME}
+  DEPLOYMENT_DISTRICT_NAME_LOCAL: ${DEPLOYMENT_DISTRICT_NAME_LOCAL:-}
+  DEPLOYMENT_STATE_NAME: ${DEPLOYMENT_STATE_NAME:-}
+  DEPLOYMENT_STATE_NAME_LOCAL: ${DEPLOYMENT_STATE_NAME_LOCAL:-}
+  SESSION_COOKIE_SECURE: "true"
+  DATABASE_HOST: ${DATABASE_HOST:?set DATABASE_HOST}
+  DATABASE_PORT: ${DATABASE_PORT:-5432}
+  DATABASE_NAME: ${DATABASE_NAME:-dgimews}
+  DATABASE_USER: ${DATABASE_APP_USER:-dgimews_app}
+  DATABASE_PASSWORD: ${DATABASE_APP_PASSWORD:?set DATABASE_APP_PASSWORD}
+  DATABASE_APP_ROLE: ${DATABASE_APP_USER:-dgimews_app}
+  DATABASE_SSLMODE: ${DATABASE_SSLMODE:-verify-full}
+  DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-5}
+  REDIS_HOST: ${REDIS_HOST:?set REDIS_HOST}
+  REDIS_PORT: ${REDIS_PORT:-6379}
+  REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+  REDIS_TLS: ${REDIS_TLS:-true}
+  STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:?set STORAGE_ENDPOINT}
+  STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?set STORAGE_ACCESS_KEY}
+  STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?set STORAGE_SECRET_KEY}
+  STORAGE_BUCKET: ${STORAGE_BUCKET:-dgimews-files}
+  STORAGE_REGION: ${STORAGE_REGION:-ap-south-1}
+  STORAGE_SECURE: ${STORAGE_SECURE:-true}
+  DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?set DATA_ENCRYPTION_KEY}
+  DATA_ENCRYPTION_PREVIOUS_KEYS: ${DATA_ENCRYPTION_PREVIOUS_KEYS:-}
+  LOOKUP_HMAC_KEY: ${LOOKUP_HMAC_KEY:?set LOOKUP_HMAC_KEY}
+  MALWARE_SCANNER: clamav
+  MALWARE_SCAN_MODE: deferred
+  CLAMAV_HOST: clamav
+  GRIEVANCE_REFERENCE_PREFIX: ${GRIEVANCE_REFERENCE_PREFIX:-DGI}
+
+x-hardening: &hardening
+  read_only: true
+  tmpfs: [/tmp]
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+
+services:
+  migrate:
+    build: ./backend
+    image: dgimews-backend:${APP_VERSION:-0.1.0}
+    profiles: ["migrate"]
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      <<: *backend-env
+      DATABASE_MIGRATION_USER: ${DATABASE_MIGRATION_USER:-dgimews_migrator}
+      DATABASE_MIGRATION_PASSWORD: ${DATABASE_MIGRATION_PASSWORD:?set DATABASE_MIGRATION_PASSWORD}
+    restart: "no"
+    networks: [egress]
+
+  worker:
+    build: ./backend
+    image: dgimews-backend:${APP_VERSION:-0.1.0}
+    restart: unless-stopped
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=INFO", "--concurrency=${WORKER_CONCURRENCY:-2}"]
+    environment: *backend-env
+    depends_on:
+      clamav:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.worker.celery_app inspect ping -d celery@$$HOSTNAME --timeout 10 | grep -q pong"]
+      interval: 60s
+      timeout: 20s
+      retries: 3
+      start_period: 30s
+    <<: *hardening
+    networks: [egress, scan]
+
+  beat:
+    image: dgimews-backend:${APP_VERSION:-0.1.0}
+    restart: unless-stopped
+    command: ["celery", "-A", "app.worker.celery_app", "beat", "--loglevel=INFO", "--schedule", "/tmp/celerybeat-schedule"]
+    environment: *backend-env
+    depends_on: [worker]
+    healthcheck:
+      disable: true
+    <<: *hardening
+    networks: [egress]
+
+  clamav:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    volumes:
+      - clamav-db:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdcheck.sh"]
+      interval: 60s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+    # On "scan" (no route to the internet) for the worker, and "egress" only so freshclam can
+    # download signature updates. clamd is never published on a host port.
+    networks: [scan, egress]
+
+networks:
+  egress: {}
+  scan:
+    internal: true
+
+volumes:
+  clamav-db: {}
