@@ -29,3 +29,6 @@ frontend/playwright-report/
 .DS_Store
 .idea/
 .vscode/
+
+# Release archives
+*.zip
