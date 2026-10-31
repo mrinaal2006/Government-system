@@ -31,6 +31,21 @@ Every protected endpoint checks permissions server-side (see
 `backend/app/modules/iam/catalogue.py`) and filters records by the caller's scope in
 SQL. Out-of-scope records respond `404`, indistinguishable from missing ones.
 
+### Sign-up
+
+* **Officials** call `POST /auth/signup` (public; options from `GET /auth/signup/options`).
+  This creates an inactive account with `approval_status = pending` and no roles or scopes;
+  sign-in answers `403 access_request_pending` (or `access_request_rejected`) when the
+  password is right, and the usual generic `401` otherwise. Users with `iam.users.manage`
+  list requests with `GET /iam/users?status=pending` and decide them with
+  `POST /iam/users/{id}/approve` (roles and scopes to grant) or `/reject` (reason).
+* **Citizens** use `/citizen/*`, a separate account type with its own cookies
+  (`dgi_csession` HttpOnly, `dgi_ccsrf` echoed in `X-CSRF-Token`). Flow: `register` →
+  `verify` (6-digit one-time code) → `login` → `grievances` (file, list, detail). A citizen
+  session reaches only the citizen's own grievances, with public status labels, the
+  responsible office and the resolution once resolved; no officer names or internal notes.
+  The whole prefix returns `404` when the portal is disabled.
+
 ## Health and metadata (unauthenticated)
 
 * `GET|HEAD /health/live`: liveness, no dependencies.
@@ -40,7 +55,7 @@ SQL. Out-of-scope records respond `404`, indistinguishable from missing ones.
 
 ## Endpoint index (generated from the OpenAPI schema)
 
-92 operations.
+108 operations.
 
 ### administration
 
@@ -83,6 +98,25 @@ SQL. Out-of-scope records respond `404`, indistinguishable from missing ones.
 | POST | `/api/v1/auth/mfa/setup` |
 | POST | `/api/v1/auth/mfa/verify` |
 | POST | `/api/v1/auth/password` |
+| POST | `/api/v1/auth/signup` |
+| GET | `/api/v1/auth/signup/options` |
+
+### citizen
+
+| Method | Path |
+|---|---|
+| GET | `/api/v1/citizen/config` |
+| GET | `/api/v1/citizen/grievances` |
+| POST | `/api/v1/citizen/grievances` |
+| GET | `/api/v1/citizen/grievances/{grievance_id}` |
+| POST | `/api/v1/citizen/login` |
+| POST | `/api/v1/citizen/logout` |
+| GET | `/api/v1/citizen/me` |
+| POST | `/api/v1/citizen/otp/resend` |
+| GET | `/api/v1/citizen/reference/categories` |
+| GET | `/api/v1/citizen/reference/units/{level}` |
+| POST | `/api/v1/citizen/register` |
+| POST | `/api/v1/citizen/verify` |
 
 ### dashboard
 
@@ -140,7 +174,9 @@ SQL. Out-of-scope records respond `404`, indistinguishable from missing ones.
 | POST | `/api/v1/iam/users` |
 | GET | `/api/v1/iam/users/{user_id}` |
 | PATCH | `/api/v1/iam/users/{user_id}` |
+| POST | `/api/v1/iam/users/{user_id}/approve` |
 | POST | `/api/v1/iam/users/{user_id}/mfa/reset` |
+| POST | `/api/v1/iam/users/{user_id}/reject` |
 | POST | `/api/v1/iam/users/{user_id}/reset-password` |
 | PUT | `/api/v1/iam/users/{user_id}/roles` |
 | PUT | `/api/v1/iam/users/{user_id}/scopes` |

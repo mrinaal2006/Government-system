@@ -1,9 +1,12 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, useNavigate, useSearchParams } from "react-router";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 
 import { Alert, Button, TextField } from "@/design-system";
 import { apiSend, errorMessage } from "@/lib/api/client";
 import { useAuth, type SessionInfo } from "@/lib/auth/AuthProvider";
+import { useApi } from "@/lib/hooks";
+
+import type { SignupOptions } from "./RequestAccessPage";
 
 import { AuthLayout } from "./AuthLayout";
 import { pathForState, safeReturnPath } from "./authFlow";
@@ -17,6 +20,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const next = safeReturnPath(params.get("next"));
+  const signup = useApi<SignupOptions>("/auth/signup/options");
 
   if (state === "authenticated") return <Navigate to={next} replace />;
 
@@ -51,6 +55,20 @@ export function LoginPage() {
           Sign in
         </Button>
       </form>
+      {signup.data?.officer_signup_enabled || signup.data?.citizen_portal_enabled ? (
+        <div className="mt-6 border-t border-line pt-4 text-sm">
+          {signup.data.officer_signup_enabled ? (
+            <p className="m-0 mb-2">
+              New official? <Link to="/request-access" className="text-link underline">Request access</Link>
+            </p>
+          ) : null}
+          {signup.data.citizen_portal_enabled ? (
+            <p className="m-0">
+              Citizen? <Link to="/citizen" className="text-link underline">File or track a grievance on the citizen portal</Link>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </AuthLayout>
   );
 }

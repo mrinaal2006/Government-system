@@ -33,11 +33,17 @@ All demo records are synthetic and labelled `[DEMO]`; the demo loader refuses to
 development. Behind a TLS-inspecting proxy, build with `./scripts/build-images.sh` (see
 docs/development.md).
 
+**Sign-up.** New officials use *Request access* on the sign-in page; an administrator
+(for example `demo.admin` or any user-management account) approves the request under *Users and roles*.
+Citizens register at **http://localhost:8080/citizen** with a mobile number; in development
+the one-time code is shown on screen because no SMS provider is integrated.
+
 ## What it does
 
 | Area | Highlights |
 |---|---|
-| Identity and access | Argon2id, server-side sessions, CSRF, TOTP MFA, lockout, rate limits, suspicious sign-in alerts, 9 roles, area-based scopes enforced in SQL |
+| Identity and access | Argon2id, server-side sessions, CSRF, TOTP MFA, lockout, rate limits, suspicious sign-in alerts, 9 roles, area-based scopes enforced in SQL, officer access requests approved by an administrator |
+| Citizen portal | Mobile-number accounts verified by one-time code; file grievances and track their public status (needs an SMS provider before production use) |
 | Grievances | Immutable references, state machine with separation of duties, assignments, notes, scanned attachments, links, duplicates, encrypted complainant data |
 | Intake | CSV/XLSX import with provenance and duplicate prevention; adapter interface for future authorised live integrations |
 | Intelligence | Rule-based, explainable category/department/location suggestions, summaries, duplicate candidates, clusters, versioned risk scoring, all reviewed by officers |

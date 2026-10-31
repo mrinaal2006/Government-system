@@ -44,6 +44,7 @@ def test_production_accepts_strong_configuration(env: pytest.MonkeyPatch) -> Non
         ({"cors_allowed_origins": "*"}, "CORS_ALLOWED_ORIGINS"),
         ({"deployment_district_name": None}, "DEPLOYMENT_DISTRICT_NAME"),
         ({"database_migration_password": "changeme"}, "DATABASE_MIGRATION_PASSWORD"),
+        ({"citizen_portal_enabled": True}, "CITIZEN_PORTAL_ENABLED requires a real SMS"),
     ],
 )
 def test_production_rejects_unsafe_configuration(
@@ -191,3 +192,10 @@ def test_vercel_preview_host_passes_host_and_origin_checks(env: pytest.MonkeyPat
         create_app(Settings()), base_url="https://someone-else.vercel.app", raise_server_exceptions=False
     )
     assert other.get("/api/v1/health/live").status_code == 400
+
+
+def test_citizen_portal_defaults(env: pytest.MonkeyPatch) -> None:
+    # On in development (console one-time codes), off in production unless explicitly enabled.
+    assert Settings(app_env="development").citizen_portal_active is True
+    assert _prod().citizen_portal_active is False
+    assert Settings(app_env="development", citizen_portal_enabled=False).citizen_portal_active is False

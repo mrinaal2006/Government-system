@@ -11,14 +11,20 @@ export interface LocationValue {
 }
 
 /** Cascading location selection from the official reference tables (no free coordinates). */
-export function LocationPicker({ value, onChange, errors = {} }: { value: LocationValue; onChange: (v: LocationValue) => void; errors?: Record<string, string> }) {
-  const districts = useUnits("districts");
+export function LocationPicker({ value, onChange, errors = {}, referenceBase = "/reference" }: {
+  value: LocationValue;
+  onChange: (v: LocationValue) => void;
+  errors?: Record<string, string>;
+  /** "/citizen/reference" on the citizen portal. */
+  referenceBase?: string;
+}) {
+  const districts = useUnits("districts", undefined, true, referenceBase);
   const district = value.district_id ?? (districts.data?.length === 1 ? districts.data[0]?.id : undefined);
-  const blocks = useUnits("blocks", district, Boolean(district));
-  const gps = useUnits("gram_panchayats", value.block_id, Boolean(value.block_id));
-  const villages = useUnits("villages", value.gram_panchayat_id, Boolean(value.gram_panchayat_id));
-  const munis = useUnits("municipalities", district, Boolean(district));
-  const wards = useUnits("wards", value.municipality_id, Boolean(value.municipality_id));
+  const blocks = useUnits("blocks", district, Boolean(district), referenceBase);
+  const gps = useUnits("gram_panchayats", value.block_id, Boolean(value.block_id), referenceBase);
+  const villages = useUnits("villages", value.gram_panchayat_id, Boolean(value.gram_panchayat_id), referenceBase);
+  const munis = useUnits("municipalities", district, Boolean(district), referenceBase);
+  const wards = useUnits("wards", value.municipality_id, Boolean(value.municipality_id), referenceBase);
   return (
     <fieldset className="mb-2 border-0 p-0">
       <legend className="mb-2 font-semibold text-ink">Location</legend>

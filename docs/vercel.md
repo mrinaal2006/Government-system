@@ -88,6 +88,8 @@ Everything in `docs/configuration.md` applies. Vercel-specific values:
   `DATABASE_MAX_OVERFLOW=2`) because each function instance has its own pool
 * `REDIS_*`, `STORAGE_*`, `DATA_ENCRYPTION_KEY`, `LOOKUP_HMAC_KEY`, `METRICS_TOKEN`,
   `DEPLOYMENT_*`, `GRIEVANCE_REFERENCE_PREFIX`: the same values as `.env.worker`
+* Sign-up: `OFFICER_SIGNUP_ENABLED` (default on). The citizen portal stays off in production
+  until a real SMS provider is integrated (see `CITIZEN_OTP_PROVIDER` in `docs/configuration.md`)
 * `UPLOAD_MAX_BYTES=4000000`: Vercel functions accept request bodies up to 4.5 MB, below the
   default 10 MB attachment limit and the 20 MB import limit (large imports must be split)
 

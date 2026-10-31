@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from app.modules.administration.router import admin as admin_router
 from app.modules.administration.router import reference as reference_router
 from app.modules.audit.router import router as audit_router
+from app.modules.citizen_portal.router import router as citizen_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.early_warning.router import router as alerts_router
 from app.modules.geography.router import router as gis_router
@@ -35,5 +36,6 @@ for r in (
     performance_router,
     dashboard_router,
     reports_router,
+    citizen_router,
 ):
     api_router.include_router(r)

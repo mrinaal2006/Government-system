@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -172,6 +172,9 @@ class UserOut(BaseModel):
     last_login_at: datetime | None
     roles: list[str]
     scopes: list[ScopeIn]
+    approval_status: str = "approved"
+    requested_role: str | None = None
+    access_request_note: str | None = None
 
 
 class UserCreate(BaseModel):
@@ -233,6 +236,9 @@ def _user_out(db: DbDep, u: User) -> UserOut:
         last_login_at=u.last_login_at,
         roles=iam.role_codes(db, u.id),
         scopes=[ScopeIn(**s.__dict__) for s in iam.scopes_for(db, u.id)],
+        approval_status=u.approval_status,
+        requested_role=u.requested_role,
+        access_request_note=u.access_request_note,
     )
 
 
@@ -268,9 +274,15 @@ UsersManage = Annotated[iam.CurrentUser, Depends(require("iam.users.manage"))]
 
 @admin.get("/users", response_model=Page[UserOut])
 def list_users(
-    cu: UsersRead, db: DbDep, pg: Annotated[tuple[int, int], Depends(paging)], q: str | None = None
+    cu: UsersRead,
+    db: DbDep,
+    pg: Annotated[tuple[int, int], Depends(paging)],
+    q: str | None = None,
+    status: Literal["approved", "pending", "rejected"] | None = None,
 ) -> Page[UserOut]:
     stmt = select(User)
+    if status:
+        stmt = stmt.where(User.approval_status == status)
     if q:
         like = f"%{q.strip()[:100]}%"
         stmt = stmt.where(or_(User.username.ilike(like), User.full_name.ilike(like)))
@@ -432,6 +444,86 @@ class RoleOut(BaseModel):
     code: str
     name: str
     permissions: list[str]
+
+
+class ApproveIn(BaseModel):
+    roles: list[str] = Field(min_length=1)
+    scopes: list[ScopeIn] = Field(default_factory=list)
+    note: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("roles")
+    @classmethod
+    def _known(cls, v: list[str]) -> list[str]:
+        return UserCreate._known_roles(v)
+
+
+class RejectIn(BaseModel):
+    note: str = Field(min_length=5, max_length=1000)
+
+
+@admin.post("/users/{user_id}/approve", response_model=UserOut)
+def approve_request(user_id: uuid.UUID, body: ApproveIn, cu: UsersManage, request: Request, db: DbDep) -> UserOut:
+    from app.modules.iam import signup
+
+    u = signup.approve(
+        db, cu, user_id, body.roles, [s.model_dump() for s in body.scopes], body.note, RequestMeta.from_request(request)
+    )
+    return _user_out(db, u)
+
+
+@admin.post("/users/{user_id}/reject", response_model=UserOut)
+def reject_request(user_id: uuid.UUID, body: RejectIn, cu: UsersManage, request: Request, db: DbDep) -> UserOut:
+    from app.modules.iam import signup
+
+    return _user_out(db, signup.reject(db, cu, user_id, body.note, RequestMeta.from_request(request)))
+
+
+# --- Public self-service access request ------------------------------------------------
+
+
+class SignupIn(BaseModel):
+    username: str = Field(pattern=r"^[a-z0-9._-]{3,64}$")
+    full_name: str = Field(min_length=2, max_length=200)
+    designation: str = Field(min_length=2, max_length=200)
+    email: EmailStr
+    department_id: uuid.UUID | None = None
+    requested_role: str = Field(max_length=64)
+    note: str | None = Field(default=None, max_length=1000)
+    password: str = Field(min_length=1, max_length=256)
+
+
+@router.get("/auth/signup/options")
+def signup_options(db: DbDep) -> dict[str, Any]:
+    """Public: what the access-request form needs (department names are public information)."""
+    from app.core.config import get_settings
+    from app.modules.administration.models import Department
+    from app.modules.iam import signup
+
+    s = get_settings()
+    deps = db.execute(
+        select(Department.id, Department.name_en).where(Department.is_active.is_(True)).order_by(Department.name_en)
+    ).all()
+    return {
+        "officer_signup_enabled": s.officer_signup_enabled,
+        "citizen_portal_enabled": s.citizen_portal_active,
+        "roles": [{"code": c, "name": ROLES[c]["name"]} for c in signup.REQUESTABLE_ROLES],
+        "departments": [{"id": str(i), "name": n} for i, n in deps],
+    }
+
+
+@router.post("/auth/signup", status_code=202)
+def request_access(body: SignupIn, request: Request, db: DbDep) -> dict[str, str]:
+    from app.core.config import get_settings
+    from app.modules.iam import signup
+
+    _origin_ok(request)
+    if not get_settings().officer_signup_enabled:
+        raise PermissionDeniedError("Access requests are not being accepted. Contact the district administration.")
+    signup.request_access(db, {**body.model_dump(), "email": str(body.email)}, RequestMeta.from_request(request))
+    return {
+        "status": "pending",
+        "message": "Your request has been sent. You can sign in after an administrator approves it.",
+    }
 
 
 @admin.get("/roles", response_model=list[RoleOut])

@@ -10,6 +10,8 @@
 
 export const API_BASE = "/api/v1";
 const CSRF_COOKIE = "dgi_csrf";
+/** The citizen portal has its own session and CSRF cookie. */
+const CITIZEN_CSRF_COOKIE = "dgi_ccsrf";
 
 export interface ApiErrorBody {
   error?: { code?: string; message?: string; request_id?: string | null; details?: unknown[] };
@@ -85,7 +87,7 @@ async function request<T>(method: string, path: string, body: unknown, options: 
     headers["Content-Type"] = "application/json";
     payload = JSON.stringify(body);
   }
-  if (method !== "GET" && method !== "HEAD") headers["X-CSRF-Token"] = readCookie(CSRF_COOKIE);
+  if (method !== "GET" && method !== "HEAD") headers["X-CSRF-Token"] = readCookie(path.startsWith("/citizen/") ? CITIZEN_CSRF_COOKIE : CSRF_COOKIE);
 
   let response: Response;
   try {
@@ -110,7 +112,7 @@ async function request<T>(method: string, path: string, body: unknown, options: 
     envelope?.request_id ?? response.headers.get("x-request-id"),
     envelope?.details ?? [],
   );
-  const isAuthCall = path.startsWith("/auth/");
+  const isAuthCall = path.startsWith("/auth/") || path.startsWith("/citizen/");
   if (!isAuthCall && (error.code === "not_authenticated" || error.code === "additional_step_required")) {
     authListeners.forEach((l) => l(error));
   }

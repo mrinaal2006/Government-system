@@ -24,7 +24,13 @@ The design uses OWASP ASVS, CERT-In directions, the DPDP Act and GIGW as referen
 | Secrets | Environment/Docker secrets only; production refuses weak/placeholder values; build CA via BuildKit secret, not in layers | unit tests |
 | Logging | JSON with request IDs; sensitive keys redacted; query strings never logged | unit tests |
 
+| Officer sign-up | Request creates an inactive account with no roles or scopes; Super Admin cannot be requested; administrator chooses roles and area; requests, approvals and rejections audited; per-IP rate limit | `test_signup.py` |
+| Citizen accounts | Separate table and session cookie; mobile, name and email encrypted, mobile looked up by HMAC; one-time codes stored as keyed hashes, 10-minute expiry, 5 attempts, single use, resend throttled; same answer whether or not a number is registered; lockout and rate limits as for officers; citizens see only their own grievances | `test_signup.py` |
+
 ## Known gaps
+
+* **No SMS provider is integrated** for citizen one-time codes. The development provider
+  logs the code; production refuses to enable the citizen portal until a real provider is added.
 
 * Rate limiting is per process/Redis window; a distributed WAF is recommended in front.
 * Encryption at rest for PostgreSQL/object storage relies on host disk encryption.

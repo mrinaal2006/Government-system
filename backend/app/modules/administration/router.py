@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.api.auth import CurrentUserDep, DbDep, require
 from app.core.errors import AppError, ConflictError, NotFoundError
@@ -119,6 +120,12 @@ def units(
     parent_id: uuid.UUID | None = None,
     q: str | None = None,
     limit: int = 500,
+) -> list[dict[str, Any]]:
+    return list_units(db, level, parent_id=parent_id, q=q, limit=limit)
+
+
+def list_units(
+    db: Session, level: UnitLevel, *, parent_id: uuid.UUID | None = None, q: str | None = None, limit: int = 500
 ) -> list[dict[str, Any]]:
     model, parent = UNIT_MODELS[level]
     stmt = select(model)

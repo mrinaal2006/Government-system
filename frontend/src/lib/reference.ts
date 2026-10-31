@@ -14,8 +14,8 @@ export function useDepartments() {
 export function useCategories() {
   return useApi<Category[]>("/reference/categories");
 }
-export function useUnits(level: string, parentId?: string | null, enabled = true) {
-  return useApi<Unit[]>(enabled ? `/reference/units/${level}` : null, parentId ? { parent_id: parentId } : undefined);
+export function useUnits(level: string, parentId?: string | null, enabled = true, base = "/reference") {
+  return useApi<Unit[]>(enabled ? `${base}/units/${level}` : null, parentId ? { parent_id: parentId } : undefined);
 }
 
 export function options<T extends { id: string; name_en: string; is_active?: boolean }>(rows: T[] | undefined) {

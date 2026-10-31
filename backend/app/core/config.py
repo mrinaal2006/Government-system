@@ -149,6 +149,16 @@ class Settings(BaseSettings):
     # (for example on Vercel).
     malware_scan_mode: Literal["inline", "deferred"] = "inline"
 
+    # --- Self-service sign-up -------------------------------------------------------------
+    # Officers may request an account; it stays inactive until an administrator approves it.
+    officer_signup_enabled: bool = True
+    # Citizen portal: None -> enabled in development/test, disabled in staging/production
+    # unless explicitly enabled AND a real SMS one-time-code provider is configured.
+    citizen_portal_enabled: bool | None = None
+    # "console": DEVELOPMENT ONLY, the code is shown on screen / in the log. No real SMS
+    # provider is integrated yet; production refuses to enable the portal with "console".
+    citizen_otp_provider: Literal["console"] = "console"
+
     # --- Grievances --------------------------------------------------------------------
     grievance_reference_prefix: str = "DGI"
 
@@ -179,6 +189,7 @@ class Settings(BaseSettings):
         "client_ip_header",
         "session_cookie_secure",
         "expose_api_docs",
+        "citizen_portal_enabled",
         mode="before",
     )
     @classmethod
@@ -252,6 +263,11 @@ class Settings(BaseSettings):
             problems.append("DEPLOYMENT_DISTRICT_NAME must be configured")
         if self.session_cookie_secure is False:
             problems.append("SESSION_COOKIE_SECURE must not be false in staging/production")
+        if self.citizen_portal_enabled and self.citizen_otp_provider == "console":
+            problems.append(
+                "CITIZEN_PORTAL_ENABLED requires a real SMS one-time-code provider; "
+                "the 'console' provider is for development only"
+            )
         if self.malware_scanner != "clamav":
             problems.append("MALWARE_SCANNER must be 'clamav' in staging/production")
         if problems:
@@ -268,6 +284,12 @@ class Settings(BaseSettings):
         if self.session_cookie_secure is not None:
             return self.session_cookie_secure
         return self.app_env not in (Environment.DEVELOPMENT, Environment.TEST)
+
+    @property
+    def citizen_portal_active(self) -> bool:
+        if self.citizen_portal_enabled is not None:
+            return self.citizen_portal_enabled
+        return self.app_env in (Environment.DEVELOPMENT, Environment.TEST)
 
     @property
     def api_docs_enabled(self) -> bool:

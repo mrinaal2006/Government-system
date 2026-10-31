@@ -79,7 +79,11 @@ def test_orm_models_match_migrations(owner_engine: Engine) -> None:
 
 
 def test_source_channels_seeded_as_not_configured(app_conn: Connection) -> None:
+    """External channels are seeded unconfigured; only this system's own citizen portal is native."""
     rows = app_conn.execute(text("SELECT code, integration_mode FROM ref.grievance_sources ORDER BY code")).all()
+    modes = {r.code: r.integration_mode for r in rows}
+    assert modes.pop("CITIZEN_PORTAL") == "native"
+    rows = [r for r in rows if r.code in modes]
     assert [r.code for r in rows] == sorted(
         [
             "BLOCK_OFFICE",

@@ -39,6 +39,7 @@ SOURCE_INTEGRATION_MODES = (
     "development_adapter",  # explicitly labelled development-only adapter
     "file_import",  # authorised CSV/XLSX import
     "live_api",  # documented, authorised live integration
+    "native",  # built into this system (the citizen self-service portal)
 )
 
 

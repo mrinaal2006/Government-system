@@ -9,7 +9,17 @@ import { ConfigPage } from "@/pages/admin/ConfigPage";
 import { UsersPage } from "@/pages/admin/UsersPage";
 import { AlertDetailPage, AlertsPage } from "@/pages/AlertsPages";
 import { LoginPage } from "@/pages/auth/LoginPage";
+import { RequestAccessPage } from "@/pages/auth/RequestAccessPage";
 import { ChangePasswordPage, MfaSetupPage, MfaVerifyPage } from "@/pages/auth/MfaPages";
+import {
+  CitizenGrievanceDetailPage,
+  CitizenHomePage,
+  CitizenLayout,
+  CitizenLoginPage,
+  CitizenNewGrievancePage,
+  CitizenRegisterPage,
+  CitizenVerifyPage,
+} from "@/pages/citizen/CitizenPortal";
 import { HomePage } from "@/pages/DashboardPage";
 import { DesignSystemPage } from "@/pages/DesignSystemPage";
 import { GisPage } from "@/pages/GisPage";
@@ -42,6 +52,20 @@ export function buildRoutes({ includeDevRoutes }: { includeDevRoutes: boolean })
     { path: "/login/verify", element: <MfaVerifyPage />, handle: { title: "Verify identity" } },
     { path: "/login/setup-mfa", element: <MfaSetupPage />, handle: { title: "Set up MFA" } },
     { path: "/login/change-password", element: <ChangePasswordPage />, handle: { title: "Change password" } },
+    { path: "/request-access", element: <RequestAccessPage />, handle: { title: "Request access" } },
+    {
+      path: "/citizen",
+      element: <CitizenLayout />,
+      children: [
+        { index: true, element: <CitizenHomePage />, handle: { title: "Citizen portal" } },
+        { path: "register", element: <CitizenRegisterPage />, handle: { title: "Create an account" } },
+        { path: "verify", element: <CitizenVerifyPage />, handle: { title: "Verify mobile number" } },
+        { path: "login", element: <CitizenLoginPage />, handle: { title: "Citizen sign in" } },
+        { path: "new", element: <CitizenNewGrievancePage />, handle: { title: "File a grievance" } },
+        { path: "grievances/:id", element: <CitizenGrievanceDetailPage />, handle: { title: "My grievance" } },
+        { path: "*", element: <NotFoundPage />, handle: { title: "Page not found" } },
+      ],
+    },
     {
       path: "/",
       element: (

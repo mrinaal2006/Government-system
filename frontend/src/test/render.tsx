@@ -68,6 +68,8 @@ export function defaultRoutes(perms: string[] = DM_PERMISSIONS): Routes {
     "/api/v1/reference/units/districts": () => jsonResponse([]),
     "/api/v1/reference/units/blocks": () => jsonResponse([]),
     "/api/v1/reference/units/municipalities": () => jsonResponse([]),
+    "/api/v1/auth/signup/options": () => jsonResponse({ officer_signup_enabled: true, citizen_portal_enabled: true,
+      roles: [{ code: "department_officer", name: "Department officer" }], departments: [{ id: "d1", name: "TEST Department" }] }),
   };
 }
 

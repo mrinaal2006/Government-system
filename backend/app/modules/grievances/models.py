@@ -101,6 +101,7 @@ class Grievance(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_grievances_subdivision_id", "subdivision_id"),
         Index("ix_grievances_source_id", "source_id"),
         Index("ix_grievances_created_by", "created_by"),
+        Index("ix_grievances_citizen_account_id", "citizen_account_id"),
         Index(
             "ix_grievances_description_trgm",
             "description",
@@ -152,6 +153,8 @@ class Grievance(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     complainant_id: Mapped[uuid.UUID | None] = _uuid_fk("citizen.complainants.id")
     duplicate_of_id: Mapped[uuid.UUID | None] = _uuid_fk("grievance.grievances.id")
     import_batch_id: Mapped[uuid.UUID | None] = _uuid_fk("grievance.import_batches.id")
+    # Set when filed by a citizen through the self-service portal.
+    citizen_account_id: Mapped[uuid.UUID | None] = _uuid_fk("citizen.citizen_accounts.id")
     created_by: Mapped[uuid.UUID | None] = _uuid_fk("iam.users.id")
     updated_by: Mapped[uuid.UUID | None] = _uuid_fk("iam.users.id")
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))

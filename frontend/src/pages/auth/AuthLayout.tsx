@@ -3,7 +3,15 @@ import type { ReactNode } from "react";
 import { GovHeader } from "@/layout/GovHeader";
 import { MAIN_CONTENT_ID, SkipLink } from "@/layout/SkipLink";
 
-export function AuthLayout({ title, children }: { title: string; children: ReactNode }) {
+export function AuthLayout({
+  title,
+  children,
+  notice = "For authorised officials only. All activity is recorded.",
+}: {
+  title: string;
+  children: ReactNode;
+  notice?: string;
+}) {
   return (
     <div className="flex min-h-screen flex-col">
       <SkipLink />
@@ -13,7 +21,7 @@ export function AuthLayout({ title, children }: { title: string; children: React
           <h1 className="m-0 mb-4 text-xl font-semibold text-brand">{title}</h1>
           {children}
         </div>
-        <p className="mt-4 text-center text-sm text-ink-muted">For authorised officials only. All activity is recorded.</p>
+        <p className="mt-4 text-center text-sm text-ink-muted">{notice}</p>
       </main>
     </div>
   );
