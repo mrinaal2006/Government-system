@@ -1,128 +1,125 @@
-"""Sign-up: officer access requests (administrator approval) and the citizen portal."""
+"""Sign-up: officer self-service accounts and the citizen portal."""
 
 from __future__ import annotations
 
 import secrets
+from typing import Any
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
 from app.core import security
 from app.modules.audit.models import AuditLog
 from app.modules.citizen_portal.models import CitizenAccount, OtpChallenge
 from app.modules.grievances.models import Grievance
-from app.modules.iam.models import User
+from app.modules.iam.models import Role, User, UserRole, UserScopeAssignment
 from app.modules.notifications.models import Notification
 from tests.integration.factories import csrf, login, make_geography, make_user, unique
 
-PASSWORD = "Strong-Passw0rd-Signup!"  # must not contain the requester's name
+PASSWORD = "Strong-Passw0rd-Signup!"  # must not contain the user's name
 
-# --- Officer access requests ---------------------------------------------------------------------
+# --- Officer sign-up -----------------------------------------------------------------------------
 
 
-def _request(client: TestClient, **over: object) -> tuple[str, object]:
-    username = unique("test.req.")
+def _signup(client: TestClient, **over: object) -> tuple[str, Any]:
+    username = unique("test.su.")
     body = {
         "username": username,
-        "full_name": "TEST Requester",
-        "designation": "TEST Block Officer",
+        "full_name": "TEST Officer",
         "email": f"{username}@example.gov.in",
-        "requested_role": "department_officer",
-        "note": "TEST DATA access request",
         "password": PASSWORD,
         **over,
     }
-    return username, client.post("/api/v1/auth/signup", json=body)
+    return str(body["username"]), client.post("/api/v1/auth/signup", json=body)
 
 
-def test_signup_options_are_public_and_exclude_super_admin(client: TestClient) -> None:
+def _roles(db: Session, username: str) -> set[str]:
+    db.expire_all()
+    return set(
+        db.execute(
+            select(Role.code)
+            .join(UserRole, UserRole.role_id == Role.id)
+            .join(User, User.id == UserRole.user_id)
+            .where(User.username == username)
+        ).scalars()
+    )
+
+
+def test_signup_options_are_public(client: TestClient) -> None:
     r = client.get("/api/v1/auth/signup/options")
     assert r.status_code == 200
-    body = r.json()
-    assert body["officer_signup_enabled"] is True and body["citizen_portal_enabled"] is True
-    codes = {x["code"] for x in body["roles"]}
-    assert "department_officer" in codes and "super_admin" not in codes
+    assert r.json() == {"officer_signup_enabled": True, "citizen_portal_enabled": True}
 
 
-def test_access_request_grants_nothing_until_approved(client: TestClient, db_session: Session) -> None:
-    admin = make_user(db_session, ["super_admin"])
-    db_session.commit()
-    username, r = _request(client)
-    assert r.status_code == 202, r.text  # type: ignore[attr-defined]
-    db_session.expire_all()
-    user = db_session.execute(select(User).where(User.username == username)).scalar_one()
-    assert user.approval_status == "pending" and user.is_active is False and user.requested_role == "department_officer"
-
-    # Pending: correct password gets a clear "pending" answer, wrong password stays generic.
-    pending = client.post("/api/v1/auth/login", json={"username": username, "password": PASSWORD})
-    assert pending.status_code == 403 and pending.json()["error"]["code"] == "access_request_pending"
-    wrong = client.post("/api/v1/auth/login", json={"username": username, "password": "wrong-password-x"})
-    assert wrong.status_code == 401
-
-    # Administrators are notified.
-    assert db_session.execute(
-        select(Notification).where(Notification.user_id == admin.id, Notification.category == "access_request")
-    ).first()
-
-    login(client, admin)
-    listing = client.get("/api/v1/iam/users", params={"status": "pending"})
-    assert listing.status_code == 200
-    assert username in {u["username"] for u in listing.json()["items"]}
-
-    ok = client.post(
-        f"/api/v1/iam/users/{user.id}/approve",
-        json={"roles": ["department_officer"], "scopes": [{"scope_type": "assigned"}], "note": "TEST approved"},
+def test_first_signup_becomes_super_admin(client: TestClient, db_session: Session) -> None:
+    db_session.execute(
+        update(User)
+        .where(
+            User.id.in_(
+                select(UserRole.user_id).join(Role, Role.id == UserRole.role_id).where(Role.code == "super_admin")
+            )
+        )
+        .values(is_active=False)
     )
-    assert ok.status_code == 200, ok.text
-    again = client.post(f"/api/v1/iam/users/{user.id}/approve", json={"roles": ["auditor"], "scopes": []})
-    assert again.status_code == 409
-    client.post("/api/v1/auth/logout", headers=csrf(client))
-
-    signed_in = client.post("/api/v1/auth/login", json={"username": username, "password": PASSWORD})
-    assert signed_in.status_code == 200, signed_in.text
-    assert "department_officer" in signed_in.json()["user"]["roles"]
-    db_session.expire_all()
-    actions = set(db_session.execute(select(AuditLog.action).where(AuditLog.resource_id == str(user.id))).scalars())
-    assert {"iam.access_requested", "iam.access_approved"} <= actions
+    db_session.commit()
+    username, r = _signup(client)
+    assert r.status_code == 201, r.text
+    assert r.json()["state"] == "mfa_enrollment_required"  # Super Admin must enrol MFA before anything else
+    assert _roles(db_session, username) == {"super_admin"}
+    # The next person is an ordinary account.
+    second, r2 = _signup(TestClient(client.app))
+    assert r2.status_code == 201
+    assert _roles(db_session, second) == {"data_entry_operator"}
 
 
-def test_rejected_request_cannot_sign_in(client: TestClient, db_session: Session) -> None:
+def test_later_signup_is_signed_in_with_least_privilege(client: TestClient, db_session: Session) -> None:
     admin = make_user(db_session, ["super_admin"])
     db_session.commit()
-    username, r = _request(client)
-    assert r.status_code == 202  # type: ignore[attr-defined]
+    username, r = _signup(client)
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["state"] == "authenticated" and body["user"]["roles"] == ["data_entry_operator"]
+    assert "grievance.create" in body["user"]["permissions"] and "citizen.read" not in body["user"]["permissions"]
+    client.headers.update(csrf(client))
+    # Signed in straight away, and sees only what it registered itself (nothing yet).
+    assert client.get("/api/v1/auth/me").json()["user"]["username"] == username
+    assert client.get("/api/v1/grievances").json()["total"] == 0
+    assert client.get("/api/v1/iam/users").status_code == 403
+    db_session.expire_all()
     uid = db_session.execute(select(User.id).where(User.username == username)).scalar_one()
-    login(client, admin)
-    assert client.post(f"/api/v1/iam/users/{uid}/reject", json={"note": "TEST not known"}).status_code == 200
-    client.post("/api/v1/auth/logout", headers=csrf(client))
-    denied = client.post("/api/v1/auth/login", json={"username": username, "password": PASSWORD})
-    assert denied.status_code == 403 and denied.json()["error"]["code"] == "access_request_rejected"
+    assert (
+        db_session.execute(
+            select(UserScopeAssignment.scope_type).where(UserScopeAssignment.user_id == uid)
+        ).scalar_one()
+        == "own"
+    )
+    assert db_session.execute(
+        select(Notification).where(Notification.user_id == admin.id, Notification.category == "user_signed_up")
+    ).first()
+    assert db_session.execute(
+        select(AuditLog).where(AuditLog.action == "iam.signed_up", AuditLog.resource_id == str(uid))
+    ).first()
+    # And can sign in again later with the same password.
+    client.post("/api/v1/auth/logout")
+    assert client.post("/api/v1/auth/login", json={"username": username, "password": PASSWORD}).status_code == 200
 
 
-def test_access_request_validation(client: TestClient, db_session: Session) -> None:
-    _, r = _request(client, requested_role="super_admin")
-    assert r.status_code in (400, 422)  # type: ignore[attr-defined]
-    _, weak = _request(client, password="password")
-    assert weak.status_code in (400, 422)  # type: ignore[attr-defined]
+def test_signup_validation(client: TestClient, db_session: Session) -> None:
+    _, weak = _signup(client, password="password")
+    assert weak.status_code in (400, 422)
+    _, bad_name = _signup(client, username="Not Valid!")
+    assert bad_name.status_code == 422
     existing = make_user(db_session, ["auditor"], mfa=False)
     db_session.commit()
-    _, dup = _request(client, username=existing.username)
-    assert dup.status_code == 409  # type: ignore[attr-defined]
+    _, dup = _signup(client, username=existing.username)
+    assert dup.status_code == 409
     cross_origin = client.post(
-        "/api/v1/auth/signup", json={"username": "x"}, headers={"Origin": "https://evil.example"}
+        "/api/v1/auth/signup",
+        json={"username": unique("test.su."), "full_name": "TEST X", "password": PASSWORD},
+        headers={"Origin": "https://evil.example"},
     )
-    assert cross_origin.status_code in (403, 422)
-
-
-def test_approve_requires_user_management_permission(client: TestClient, db_session: Session) -> None:
-    officer = make_user(db_session, ["department_officer"], scopes=[{"scope_type": "assigned"}])
-    db_session.commit()
-    username, _ = _request(client)
-    uid = db_session.execute(select(User.id).where(User.username == username)).scalar_one()
-    login(client, officer)
-    r = client.post(f"/api/v1/iam/users/{uid}/approve", json={"roles": ["district_magistrate"], "scopes": []})
-    assert r.status_code == 403
+    assert cross_origin.status_code == 403
 
 
 # --- Citizen portal ------------------------------------------------------------------------------

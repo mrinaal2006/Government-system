@@ -36,8 +36,6 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("username ~ '^[a-z0-9._-]{3,64}$'", name="username_format"),
         CheckConstraint("failed_login_count >= 0", name="failed_login_nonnegative"),
-        CheckConstraint("approval_status IN ('approved', 'pending', 'rejected')", name="approval_status_allowed"),
-        Index("ix_users_approval_status", "approval_status"),
         {"schema": SCHEMA},
     )
 
@@ -58,14 +56,6 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), _fk("iam.users.id"))
     # Self-service access requests: created "pending" and inactive until an administrator
     # approves them and assigns the actual roles and area of responsibility.
-    approval_status: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="approved", server_default=text("'approved'")
-    )
-    requested_role: Mapped[str | None] = mapped_column(String(64))
-    access_request_note: Mapped[str | None] = mapped_column(Text)
-    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), _fk("iam.users.id"))
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    review_note: Mapped[str | None] = mapped_column(Text)
 
 
 class Role(UUIDPrimaryKeyMixin, TimestampMixin, Base):

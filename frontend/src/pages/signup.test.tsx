@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { describe, expect, it } from "vitest";
 
-import { jsonResponse, mockApi, renderApp } from "@/test/render";
+import { jsonResponse, mockApi, OFFICER_PERMISSIONS, renderApp, session } from "@/test/render";
 
 const anonymous = () => jsonResponse({ error: { code: "not_authenticated", message: "Please sign in" } }, 401);
 const noAxeViolations = async (container: HTMLElement) => {
@@ -11,58 +11,68 @@ const noAxeViolations = async (container: HTMLElement) => {
   expect(results.violations.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
 };
 
-describe("Officer access request", () => {
-  it("is linked from sign-in, checks the confirmation and submits the request", async () => {
+describe("Officer sign-up", () => {
+  it("is linked from sign-in, checks the confirmation, then signs straight in", async () => {
     let sent: Record<string, unknown> | null = null;
+    let me: Response = anonymous();
     mockApi({
-      "/api/v1/auth/me": anonymous,
+      "/api/v1/auth/me": () => me.clone(),
       "/api/v1/auth/signup": (_u, init) => {
         sent = JSON.parse(String(init?.body)) as Record<string, unknown>;
-        return jsonResponse({ status: "pending" }, 202);
+        me = jsonResponse(session(OFFICER_PERMISSIONS, ["data_entry_operator"]));
+        return jsonResponse(session(OFFICER_PERMISSIONS, ["data_entry_operator"]), 201);
       },
     });
-    const { container } = renderApp("/login");
-    await userEvent.click(await screen.findByRole("link", { name: "Sign up / request access" }));
-    expect(await screen.findByRole("heading", { level: 1, name: "Request access" })).toBeInTheDocument();
+    const { container, router } = renderApp("/login");
+    await userEvent.click(await screen.findByRole("link", { name: "Sign up" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Sign up" })).toBeInTheDocument();
     await noAxeViolations(container);
     await userEvent.type(screen.getByLabelText(/Username/), "Asha.K");
     await userEvent.type(screen.getByLabelText(/Full name/), "Asha K");
-    await userEvent.type(screen.getByLabelText(/Designation/), "Block Officer");
-    await userEvent.type(screen.getByLabelText(/Official email/), "asha@example.gov.in");
-    await userEvent.selectOptions(screen.getByLabelText(/Role requested/), "department_officer");
     await userEvent.type(screen.getByLabelText(/^Password/), "Long-Passw0rd-123");
     await userEvent.type(screen.getByLabelText(/Confirm password/), "different");
-    await userEvent.click(screen.getByRole("button", { name: "Submit request" }));
+    await userEvent.click(screen.getByRole("button", { name: "Sign up" }));
     expect(await screen.findByText("The passwords do not match.")).toBeInTheDocument();
     expect(sent).toBeNull();
     await userEvent.clear(screen.getByLabelText(/Confirm password/));
     await userEvent.type(screen.getByLabelText(/Confirm password/), "Long-Passw0rd-123");
-    await userEvent.click(screen.getByRole("button", { name: "Submit request" }));
-    expect(await screen.findByRole("heading", { level: 1, name: "Request submitted" })).toBeInTheDocument();
-    expect(sent).toMatchObject({ username: "asha.k", requested_role: "department_officer", department_id: null });
-    expect(sent).not.toHaveProperty("confirm");
+    await userEvent.click(screen.getByRole("button", { name: "Sign up" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+    expect(sent).toEqual({ username: "asha.k", full_name: "Asha K", email: null, password: "Long-Passw0rd-123" });
   });
-});
 
-describe("Sign-up link", () => {
-  it("stays visible when the options call fails, and the form explains the failure", async () => {
+  it("sends the first account (Super Administrator) to MFA set-up", async () => {
+    mockApi({
+      "/api/v1/auth/me": anonymous,
+      "/api/v1/auth/signup": () => jsonResponse(session([], ["super_admin"], "mfa_enrollment_required"), 201),
+      "/api/v1/auth/mfa/setup": () => jsonResponse({ secret: "JBSWY3DPEHPK3PXP", otpauth_uri: "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP" }),
+    });
+    const { router } = renderApp("/signup");
+    await userEvent.type(await screen.findByLabelText(/Username/), "admin.dg");
+    await userEvent.type(screen.getByLabelText(/Full name/), "Asha K");
+    await userEvent.type(screen.getByLabelText(/^Password/), "Long-Passw0rd-123");
+    await userEvent.type(screen.getByLabelText(/Confirm password/), "Long-Passw0rd-123");
+    await userEvent.click(screen.getByRole("button", { name: "Sign up" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/login/setup-mfa"));
+  });
+
+  it("keeps the link visible when the options call fails", async () => {
     mockApi({
       "/api/v1/auth/me": anonymous,
       "/api/v1/auth/signup/options": () => jsonResponse({ error: { code: "internal_error", message: "Server error" } }, 500),
     });
     renderApp("/login");
-    await userEvent.click(await screen.findByRole("link", { name: "Sign up / request access" }));
-    expect(await screen.findByText("The sign-up service could not be reached.")).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Sign up" })).toBeInTheDocument();
   });
 
-  it("is hidden only when the server turns officer sign-up off", async () => {
+  it("hides the link only when the server turns sign-up off", async () => {
     mockApi({
       "/api/v1/auth/me": anonymous,
-      "/api/v1/auth/signup/options": () => jsonResponse({ officer_signup_enabled: false, citizen_portal_enabled: false, roles: [], departments: [] }),
+      "/api/v1/auth/signup/options": () => jsonResponse({ officer_signup_enabled: false, citizen_portal_enabled: false }),
     });
     renderApp("/login");
     await screen.findByRole("heading", { level: 1, name: "Sign in" });
-    await waitFor(() => expect(screen.queryByRole("link", { name: "Sign up / request access" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("link", { name: "Sign up" })).not.toBeInTheDocument());
   });
 });
 

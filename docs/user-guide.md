@@ -8,13 +8,14 @@
 | Department Officer | Grievances assigned to them: start work, record investigation notes, upload evidence, submit the resolution report |
 | Data Entry Operator | Register grievances (with consent for personal details), upload attachments, import authorised files |
 | Auditor | Read-only view of grievances (personal data masked), dashboards and the audit log |
-| Super Administrator | Users, roles, areas of responsibility, master data and settings; approves or rejects access requests; no access to grievances |
+| Super Administrator | Users, roles, areas of responsibility, master data and settings; no access to grievances |
 | Citizen (portal) | Creates an account with a mobile number, files grievances and follows their progress |
 
-**New officials** choose *Request access* on the sign-in page. The request reaches every
-user administrator as a notification; under *Users and roles → Show: Access requests
-awaiting approval* they approve it (choosing the roles and area of responsibility) or
-reject it with a reason. Until then the person cannot sign in.
+**Sign up:** on the sign-in page choose *Sign up*, enter a username, your name and a password,
+and you are signed in straight away. The very first account on a new installation becomes
+the Super Administrator (it must set up an authenticator app). Everyone after that starts as
+a Data Entry Operator who can register grievances and see only their own; the Super
+Administrator gets a notification and can give a wider role and area under *Users and roles*.
 
 **Citizens** open `/citizen`, create an account with their mobile number, enter the
 one-time code sent to it, and can then file grievances and see each one's reference number,

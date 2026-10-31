@@ -6,7 +6,7 @@ import { apiSend, errorMessage } from "@/lib/api/client";
 import { useAuth, type SessionInfo } from "@/lib/auth/AuthProvider";
 import { useApi } from "@/lib/hooks";
 
-import type { SignupOptions } from "./RequestAccessPage";
+import type { SignupOptions } from "./SignUpPage";
 
 import { AuthLayout } from "./AuthLayout";
 import { pathForState, safeReturnPath } from "./authFlow";
@@ -59,7 +59,7 @@ export function LoginPage() {
       <div className="mt-6 border-t border-line pt-4 text-sm">
         {signup.data?.officer_signup_enabled !== false ? (
           <p className="m-0 mb-2">
-            New official? <Link to="/request-access" className="text-link underline">Sign up / request access</Link>
+            Don&apos;t have an account? <Link to="/signup" className="text-link underline">Sign up</Link>
           </p>
         ) : null}
         {signup.data?.citizen_portal_enabled ? (

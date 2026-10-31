@@ -58,7 +58,7 @@ contain `*`, if `LOG_LEVEL=DEBUG`, or if `DEPLOYMENT_DISTRICT_NAME` is unset.
 | `PASSWORD_MIN_LENGTH` | `12` | |
 | `MFA_REQUIRED_ROLES` | `super_admin,district_magistrate,additional_district_magistrate,auditor` | |
 | `MFA_ISSUER` | `DG-IMEWS` | Label shown in authenticator apps |
-| `OFFICER_SIGNUP_ENABLED` | `true` | Officials may request an account online; nothing is granted until an administrator approves it. `false` hides the form and refuses requests |
+| `OFFICER_SIGNUP_ENABLED` | `true` | Officials may create an account on the sign-up page and are signed in at once: the first account becomes the Super Administrator (while no active one exists); every later account is a Data Entry Operator that sees only the grievances it registered. `false` hides the link and refuses sign-ups |
 | `CITIZEN_PORTAL_ENABLED` | unset | Citizen self-service portal. Unset = on in development/test, off elsewhere. Production refuses `true` while `CITIZEN_OTP_PROVIDER=console` |
 | `CITIZEN_OTP_PROVIDER` | `console` | How one-time codes reach citizens. `console` (the only provider implemented) writes the code to the API log and, in development/test only, returns it to the browser. A real SMS gateway (for example the government SMS service through NIC) must be integrated before the portal is used in production |
 

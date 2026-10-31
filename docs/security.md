@@ -24,10 +24,14 @@ The design uses OWASP ASVS, CERT-In directions, the DPDP Act and GIGW as referen
 | Secrets | Environment/Docker secrets only; production refuses weak/placeholder values; build CA via BuildKit secret, not in layers | unit tests |
 | Logging | JSON with request IDs; sensitive keys redacted; query strings never logged | unit tests |
 
-| Officer sign-up | Request creates an inactive account with no roles or scopes; Super Admin cannot be requested; administrator chooses roles and area; requests, approvals and rejections audited; per-IP rate limit | `test_signup.py` |
+| Officer sign-up | Active immediately; the first account becomes the Super Administrator (while no active one exists); every later account is a Data Entry Operator that sees only the grievances it registered (no access to other people's grievances or citizen data); first-account check serialised with an advisory lock; Super Admin still must enrol MFA; sign-ups audited and administrators notified; per-IP rate limit, password policy, Origin check | `test_signup.py` |
 | Citizen accounts | Separate table and session cookie; mobile, name and email encrypted, mobile looked up by HMAC; one-time codes stored as keyed hashes, 10-minute expiry, 5 attempts, single use, resend throttled; same answer whether or not a number is registered; lockout and rate limits as for officers; citizens see only their own grievances | `test_signup.py` |
 
 ## Known gaps
+
+* **Claim the Super Administrator account straight after deploying.** Until someone signs up,
+  the first person to reach the sign-up page becomes Super Administrator. Set
+  `OFFICER_SIGNUP_ENABLED=false` if accounts should only be created by an administrator.
 
 * **No SMS provider is integrated** for citizen one-time codes. The development provider
   logs the code; production refuses to enable the citizen portal until a real provider is added.

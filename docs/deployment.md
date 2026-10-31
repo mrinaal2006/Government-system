@@ -50,6 +50,9 @@ before the API and workers start. First start of ClamAV downloads signatures (se
 docker compose exec api python -m app.cli create-superadmin --username admin.dg --full-name "Name of officer"
 ```
 
+Alternatively, open the site and use *Sign up*: while no Super Administrator exists, the first
+account created there becomes one. Do this immediately after deployment.
+
 The password is prompted (never on the command line). At first sign-in the administrator must
 enrol MFA and change the password. The administrator then creates officer accounts, roles and
 areas of responsibility under **Users and roles**, and loads master data under **Configuration**

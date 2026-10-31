@@ -33,12 +33,11 @@ SQL. Out-of-scope records respond `404`, indistinguishable from missing ones.
 
 ### Sign-up
 
-* **Officials** call `POST /auth/signup` (public; options from `GET /auth/signup/options`).
-  This creates an inactive account with `approval_status = pending` and no roles or scopes;
-  sign-in answers `403 access_request_pending` (or `access_request_rejected`) when the
-  password is right, and the usual generic `401` otherwise. Users with `iam.users.manage`
-  list requests with `GET /iam/users?status=pending` and decide them with
-  `POST /iam/users/{id}/approve` (roles and scopes to grant) or `/reject` (reason).
+* **Officials** call `POST /auth/signup` (public; `GET /auth/signup/options` says whether it
+  is on) with `username`, `full_name`, optional `email` and `password`. The account is
+  active at once and the response is a signed-in session, exactly like `/auth/login`. Roles:
+  the first account becomes the Super Administrator (while no active one exists); every later account is a Data Entry Operator that sees only the grievances it registered (role `data_entry_operator`, scope `own`). Administrators widen roles
+  and areas with the normal user-management endpoints.
 * **Citizens** use `/citizen/*`, a separate account type with its own cookies
   (`dgi_csession` HttpOnly, `dgi_ccsrf` echoed in `X-CSRF-Token`). Flow: `register` →
   `verify` (6-digit one-time code) → `login` → `grievances` (file, list, detail). A citizen
@@ -55,7 +54,7 @@ SQL. Out-of-scope records respond `404`, indistinguishable from missing ones.
 
 ## Endpoint index (generated from the OpenAPI schema)
 
-108 operations.
+106 operations.
 
 ### administration
 
@@ -174,9 +173,7 @@ SQL. Out-of-scope records respond `404`, indistinguishable from missing ones.
 | POST | `/api/v1/iam/users` |
 | GET | `/api/v1/iam/users/{user_id}` |
 | PATCH | `/api/v1/iam/users/{user_id}` |
-| POST | `/api/v1/iam/users/{user_id}/approve` |
 | POST | `/api/v1/iam/users/{user_id}/mfa/reset` |
-| POST | `/api/v1/iam/users/{user_id}/reject` |
 | POST | `/api/v1/iam/users/{user_id}/reset-password` |
 | PUT | `/api/v1/iam/users/{user_id}/roles` |
 | PUT | `/api/v1/iam/users/{user_id}/scopes` |

@@ -9,7 +9,7 @@ import { ConfigPage } from "@/pages/admin/ConfigPage";
 import { UsersPage } from "@/pages/admin/UsersPage";
 import { AlertDetailPage, AlertsPage } from "@/pages/AlertsPages";
 import { LoginPage } from "@/pages/auth/LoginPage";
-import { RequestAccessPage } from "@/pages/auth/RequestAccessPage";
+import { SignUpPage } from "@/pages/auth/SignUpPage";
 import { ChangePasswordPage, MfaSetupPage, MfaVerifyPage } from "@/pages/auth/MfaPages";
 import {
   CitizenGrievanceDetailPage,
@@ -52,7 +52,7 @@ export function buildRoutes({ includeDevRoutes }: { includeDevRoutes: boolean })
     { path: "/login/verify", element: <MfaVerifyPage />, handle: { title: "Verify identity" } },
     { path: "/login/setup-mfa", element: <MfaSetupPage />, handle: { title: "Set up MFA" } },
     { path: "/login/change-password", element: <ChangePasswordPage />, handle: { title: "Change password" } },
-    { path: "/request-access", element: <RequestAccessPage />, handle: { title: "Request access" } },
+    { path: "/signup", element: <SignUpPage />, handle: { title: "Sign up" } },
     {
       path: "/citizen",
       element: <CitizenLayout />,

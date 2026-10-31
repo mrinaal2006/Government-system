@@ -1,141 +1,106 @@
-"""Officer access requests (self-service sign-up with administrator approval).
+"""Self-service sign-up for officials.
 
-A request creates an INACTIVE user with approval_status "pending", no roles and no
-scopes, so it grants no access whatsoever. Administrators holding iam.users.manage are
-notified, choose the actual roles and area of responsibility, and approve or reject.
+The account is active immediately; no approval step.
+
+* While no active Super Administrator exists, the person who signs up becomes the
+  Super Administrator. This replaces the command-line bootstrap. A transaction-level
+  advisory lock makes this safe when two sign-ups arrive at the same moment.
+* Every later account gets the Data Entry Operator role with the "own" scope: it can
+  register grievances and see only the ones it registered. It cannot see anyone
+  else's grievances or citizen data until an administrator assigns a wider role and
+  area under Users and roles.
 """
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core import security
-from app.core.errors import AppError, ConflictError, NotFoundError
+from app.core.errors import AppError, ConflictError
 from app.core.ratelimit import hit
 from app.core.request_meta import RequestMeta
 from app.modules.audit import service as audit
-from app.modules.iam.catalogue import ROLES
-from app.modules.iam.models import Permission, RolePermission, User, UserRole
-from app.modules.iam.service import CurrentUser, revoke_sessions
+from app.modules.iam.models import Permission, Role, RolePermission, User, UserRole, UserScopeAssignment
 from app.modules.notifications.service import notify_many
 
-REQUESTABLE_ROLES = [r for r in ROLES if r != "super_admin"]
+DEFAULT_ROLE = "data_entry_operator"
+DEFAULT_SCOPE = "own"
+_BOOTSTRAP_LOCK = 0x44474953  # arbitrary constant: serialises "first account" sign-ups
 
 
-def administrators(db: Session) -> list[uuid.UUID]:
+def _active_users_with(db: Session, permission: str) -> list[Any]:
     holders = (
         select(UserRole.user_id)
         .join(RolePermission, RolePermission.role_id == UserRole.role_id)
         .join(Permission, Permission.id == RolePermission.permission_id)
-        .where(Permission.code == "iam.users.manage")
+        .where(Permission.code == permission)
     )
     return list(db.execute(select(User.id).where(User.is_active.is_(True), User.id.in_(holders))).scalars())
 
 
-def request_access(db: Session, data: dict[str, Any], meta: RequestMeta) -> User:
+def super_admin_exists(db: Session) -> bool:
+    return bool(
+        db.execute(
+            select(User.id)
+            .join(UserRole, UserRole.user_id == User.id)
+            .join(Role, Role.id == UserRole.role_id)
+            .where(Role.code == "super_admin", User.is_active.is_(True))
+            .limit(1)
+        ).first()
+    )
+
+
+def sign_up(db: Session, data: dict[str, Any], meta: RequestMeta) -> User:
     hit(f"signup-ip:{meta.ip or 'unknown'}", 5, window_seconds=3600, fail_closed=True)
-    if data["requested_role"] not in REQUESTABLE_ROLES:
-        raise AppError("This role cannot be requested.", code="role_not_requestable")
-    if db.execute(select(User.id).where(User.username == data["username"])).first():
+    username = data["username"]
+    if db.execute(select(User.id).where(User.username == username)).first():
         raise ConflictError("That username is already in use. Choose another.")
     try:
-        security.validate_password_policy(data["password"], username=data["username"], full_name=data["full_name"])
+        security.validate_password_policy(data["password"], username=username, full_name=data["full_name"])
     except security.WeakPasswordError as exc:
         raise AppError(str(exc), code="weak_password") from exc
+
+    db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _BOOTSTRAP_LOCK})
+    first_admin = not super_admin_exists(db)
+    role_code = "super_admin" if first_admin else DEFAULT_ROLE
+
     user = User(
-        username=data["username"],
+        username=username,
         full_name=data["full_name"],
-        designation=data["designation"],
-        email=data["email"],
-        department_id=data.get("department_id"),
+        email=data.get("email"),
         password_hash=security.hash_password(data["password"]),
         password_changed_at=datetime.now(UTC),
         must_change_password=False,
-        is_active=False,
-        approval_status="pending",
-        requested_role=data["requested_role"],
-        access_request_note=data.get("note"),
+        is_active=True,
     )
     db.add(user)
     db.flush()
-    audit.record(
-        db,
-        action="iam.access_requested",
-        actor=audit.Actor(user.id, user.username),
-        resource_type="user",
-        resource_id=user.id,
-        details={"requested_role": user.requested_role},
-        meta=meta,
-    )
-    notify_many(
-        db,
-        administrators(db),
-        "access_request",
-        f"Access request from {user.full_name}",
-        f"{user.designation or ''} requested the role {ROLES[data['requested_role']]['name']}.",
-        "/admin/users?status=pending",
-    )
-    return user
-
-
-def approve(
-    db: Session,
-    admin: CurrentUser,
-    user_id: uuid.UUID,
-    roles: list[str],
-    scopes: list[dict[str, Any]],
-    note: str | None,
-    meta: RequestMeta,
-) -> User:
-    from app.modules.iam.models import Role, UserScopeAssignment
-
-    user = db.get(User, user_id, with_for_update=True)
-    if user is None:
-        raise NotFoundError("User not found.")
-    if user.approval_status != "pending":
-        raise ConflictError("This request has already been decided.")
-    if not roles:
-        raise AppError("Assign at least one role.", code="roles_required")
-    for rid in db.execute(select(Role.id).where(Role.code.in_(roles))).scalars():
-        db.add(UserRole(user_id=user.id, role_id=rid, granted_by=admin.id))
-    for s in scopes:
-        db.add(UserScopeAssignment(user_id=user.id, granted_by=admin.id, **s))
-    user.approval_status, user.is_active = "approved", True
-    user.reviewed_by, user.reviewed_at, user.review_note = admin.id, datetime.now(UTC), note
+    role_id = db.execute(select(Role.id).where(Role.code == role_code)).scalar_one()
+    db.add(UserRole(user_id=user.id, role_id=role_id))
+    if not first_admin:
+        db.add(UserScopeAssignment(user_id=user.id, scope_type=DEFAULT_SCOPE))
     db.flush()
     audit.record(
         db,
-        action="iam.access_approved",
-        actor=admin.actor,
+        action="iam.signed_up",
+        actor=audit.Actor(user.id, user.username),
         resource_type="user",
         resource_id=user.id,
-        details={"roles": roles, "scopes": len(scopes), "requested_role": user.requested_role},
+        details={"role": role_code, "first_administrator": first_admin},
         meta=meta,
     )
-    return user
-
-
-def reject(db: Session, admin: CurrentUser, user_id: uuid.UUID, note: str, meta: RequestMeta) -> User:
-    user = db.get(User, user_id, with_for_update=True)
-    if user is None:
-        raise NotFoundError("User not found.")
-    if user.approval_status != "pending":
-        raise ConflictError("This request has already been decided.")
-    user.approval_status, user.is_active = "rejected", False
-    user.reviewed_by, user.reviewed_at, user.review_note = admin.id, datetime.now(UTC), note
-    revoke_sessions(db, user.id, "access_rejected")
-    audit.record(
-        db,
-        action="iam.access_rejected",
-        actor=admin.actor,
-        resource_type="user",
-        resource_id=user.id,
-        details={"note": note},
-        meta=meta,
-    )
+    if not first_admin:
+        notify_many(
+            db,
+            _active_users_with(db, "iam.users.manage"),
+            "user_signed_up",
+            f"New account: {user.full_name}",
+            f"{user.username} signed up as Data Entry Operator (own records only). "
+            "Assign a role and area under Users and roles if needed.",
+            "/admin/users",
+        )
     return user

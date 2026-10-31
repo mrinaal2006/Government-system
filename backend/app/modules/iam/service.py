@@ -43,12 +43,6 @@ class AccountLockedError(AppError):
     message = "This account is temporarily locked. Try again later or contact the administrator."
 
 
-class AccessPendingError(AppError):
-    status_code = 403
-    code = "access_request_pending"
-    message = "Your access request is awaiting approval by the administrator."
-
-
 class InvalidCodeError(AppError):
     status_code = 400
     code = "invalid_code"
@@ -332,16 +326,6 @@ def login(db: Session, username: str, password: str, meta: RequestMeta) -> tuple
         _fail(user.id, uname, meta, "locked")
         if password_ok:
             raise AccountLockedError()
-        raise AuthenticationError()
-    if user.approval_status != "approved":
-        _fail(user.id, uname, meta, f"access_request_{user.approval_status}")
-        if password_ok and user.approval_status == "pending":
-            raise AccessPendingError()
-        if password_ok:
-            raise AccessPendingError(
-                "Your access request was not approved. Contact the district administration.",
-                code="access_request_rejected",
-            )
         raise AuthenticationError()
     if not user.is_active:
         _fail(user.id, uname, meta, "inactive")
