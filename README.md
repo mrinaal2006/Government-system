@@ -52,7 +52,7 @@ docs/development.md).
 [Architecture](docs/architecture.md) · [Database](docs/database.md) · [API](docs/api.md) ·
 [Configuration](docs/configuration.md) · [Development](docs/development.md) ·
 [Testing](docs/testing.md) · [Deployment](docs/deployment.md) · [Operations](docs/operations.md) ·
-[Security](docs/security.md) · [Integrations](docs/integrations.md) · [User guide](docs/user-guide.md) ·
+[Security](docs/security.md) · [Vercel](docs/vercel.md) · [Integrations](docs/integrations.md) · [User guide](docs/user-guide.md) ·
 [ADRs](docs/adr/) · [Phase reports](docs/phase-reports.md)
 
 ## Compliance note

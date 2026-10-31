@@ -21,6 +21,7 @@ contain `*`, if `LOG_LEVEL=DEBUG`, or if `DEPLOYMENT_DISTRICT_NAME` is unset.
 | `EXPOSE_API_DOCS` | unset | Unset = docs on outside production, off in production |
 | `ALLOWED_HOSTS` | `localhost,127.0.0.1,api,testserver` | Comma-separated `Host` header allow-list |
 | `CORS_ALLOWED_ORIGINS` | empty | Normally empty: the UI is same-origin via nginx |
+| `CLIENT_IP_HEADER` | unset | Header with the real client IP set by a trusted edge (`x-real-ip` on Vercel). Leave unset behind nginx |
 | `DEPLOYMENT_DISTRICT_NAME` | unset | Official header; required in staging/production |
 | `DEPLOYMENT_DISTRICT_NAME_LOCAL` | unset | District name in local script |
 | `DEPLOYMENT_STATE_NAME` / `_LOCAL` | unset | "Government of …" line |

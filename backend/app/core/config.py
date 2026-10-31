@@ -63,6 +63,9 @@ class Settings(BaseSettings):
         default_factory=lambda: ["localhost", "127.0.0.1", "api", "testserver"]
     )
     cors_allowed_origins: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    # Header carrying the real client address when a trusted edge sets it (for example
+    # "x-real-ip" on Vercel). Unset: use the socket peer (nginx/uvicorn proxy headers).
+    client_ip_header: str | None = None
 
     # --- Deployment identity (shown in the official header; never invented) -------
     deployment_district_name: str | None = None
@@ -165,6 +168,7 @@ class Settings(BaseSettings):
         "deployment_state_name_local",
         "database_migration_user",
         "map_tile_url",
+        "client_ip_header",
         "session_cookie_secure",
         "expose_api_docs",
         mode="before",

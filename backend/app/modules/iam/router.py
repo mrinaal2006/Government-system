@@ -49,8 +49,20 @@ def _session_info(cu: iam.CurrentUser) -> SessionInfo:
 
 
 def _origin_ok(request: Request) -> None:
+    """Refuse cross-origin sign-in. The Origin must match the Host header (nginx) or be one
+    of ALLOWED_HOSTS (edges such as Vercel may forward an internal Host to the function)."""
+    from urllib.parse import urlsplit
+
+    from app.api.deps import get_app_settings
+
     origin = request.headers.get("origin")
-    if origin and origin.split("://", 1)[-1] != request.headers.get("host", ""):
+    if not origin:
+        return
+    parts = urlsplit(origin)
+    if parts.netloc == request.headers.get("host", ""):
+        return
+    allowed = {h.lower() for h in get_app_settings(request).allowed_hosts if h != "*"}
+    if (parts.hostname or "").lower() not in allowed:
         raise PermissionDeniedError("Cross-origin sign-in is not permitted.")
 
 

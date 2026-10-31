@@ -213,3 +213,37 @@ def test_access_log_omits_query_string(client: TestClient, caplog: pytest.LogCap
     assert records
     assert records[-1].path == "/api/v1/health/live"  # type: ignore[attr-defined]
     assert "SensitiveName" not in json.dumps(records[-1].__dict__, default=str)
+
+
+def test_client_ip_header_is_used_only_when_configured(env: pytest.MonkeyPatch) -> None:
+    from starlette.requests import Request
+
+    from app.core.config import get_settings
+    from app.core.request_meta import RequestMeta
+
+    def req(headers: dict[str, str]) -> Request:
+        return Request(
+            {
+                "type": "http",
+                "headers": [(k.encode(), v.encode()) for k, v in headers.items()],
+                "client": ("10.0.0.5", 1234),
+            }
+        )
+
+    assert RequestMeta.from_request(req({"x-real-ip": "203.0.113.9"})).ip == "10.0.0.5"  # not trusted by default
+    env.setenv("CLIENT_IP_HEADER", "x-real-ip")
+    get_settings.cache_clear()
+    assert RequestMeta.from_request(req({"x-real-ip": "203.0.113.9"})).ip == "203.0.113.9"
+    assert RequestMeta.from_request(req({"x-real-ip": "not-an-ip"})).ip == "10.0.0.5"
+
+
+def test_login_origin_accepts_allowed_host_and_rejects_others(env: pytest.MonkeyPatch) -> None:
+    app = _app(allowed_hosts="testserver,grievance.example.gov.in")
+    c = TestClient(app, raise_server_exceptions=False)
+    body = {"username": "x", "password": "y"}
+    # Origin host is an allowed host although Host differs: passes the origin check
+    # (and then fails later for other reasons, never with permission_denied).
+    r = c.post("/api/v1/auth/login", json=body, headers={"Origin": "https://grievance.example.gov.in"})
+    assert r.json()["error"]["code"] != "permission_denied"
+    r = c.post("/api/v1/auth/login", json=body, headers={"Origin": "https://evil.example"})
+    assert r.status_code == 403 and r.json()["error"]["code"] == "permission_denied"
