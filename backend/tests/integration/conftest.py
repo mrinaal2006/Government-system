@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from sqlalchemy import Connection, Engine, create_engine, text
+from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from tests.conftest import clear_cached_singletons, integration_environment
@@ -95,3 +97,32 @@ def insert_test_dataset(conn: Connection) -> str:
             )
         ).scalar_one()
     )
+
+
+@pytest.fixture
+def db_session(migrated: Settings) -> Iterator[Session]:
+    """Runtime-role session that COMMITS (API tests need visible data). TEST DATA only."""
+    from app.db.session import get_session_factory
+
+    clear_cached_singletons()
+    with get_session_factory()() as s:
+        yield s
+        s.commit()
+
+
+@pytest.fixture
+def client(migrated: Settings) -> Iterator[TestClient]:
+    from app.main import create_app
+
+    clear_cached_singletons()
+    _flush_rate_limits()
+    with TestClient(create_app(), raise_server_exceptions=False) as c:
+        yield c
+
+
+def _flush_rate_limits() -> None:
+    from app.infra.redis import get_redis
+
+    r = get_redis()
+    for key in r.scan_iter("rl:*", count=500):
+        r.delete(key)

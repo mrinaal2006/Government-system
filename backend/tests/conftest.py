@@ -58,12 +58,27 @@ def integration_environment() -> dict[str, str]:
         "REDIS_CACHE_DB": "10",
         "REDIS_BROKER_DB": "11",
         "REDIS_RESULT_DB": "12",
+        "DATA_ENCRYPTION_KEY": pick("DATA_ENCRYPTION_KEY"),
+        "LOOKUP_HMAC_KEY": pick("LOOKUP_HMAC_KEY"),
+        "STORAGE_ENDPOINT": pick("TEST_STORAGE_ENDPOINT", "127.0.0.1:" + pick("DEV_STORAGE_PORT", "53900")),
+        "STORAGE_ACCESS_KEY": pick("STORAGE_ACCESS_KEY"),
+        "STORAGE_SECRET_KEY": pick("STORAGE_SECRET_KEY"),
+        "STORAGE_BUCKET": pick("STORAGE_BUCKET", "dgimews-files"),
+        "MALWARE_SCANNER": "none",
+        "LOGIN_RATE_LIMIT_PER_MINUTE": "1000",
+        "METRICS_TOKEN": pick("METRICS_TOKEN"),
     }
 
 
 def clear_cached_singletons() -> None:
+    from app.core.security import reset_crypto_caches
     from app.db.session import get_engine, get_session_factory
     from app.infra.redis import get_redis
+
+    reset_crypto_caches()
+    from app.infra import storage
+
+    storage.client.cache_clear()
 
     if get_engine.cache_info().currsize:
         get_engine().dispose()

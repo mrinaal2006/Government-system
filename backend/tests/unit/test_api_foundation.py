@@ -93,6 +93,10 @@ def test_hsts_in_production(env: pytest.MonkeyPatch) -> None:
             database_password=strong,  # type: ignore[arg-type]
             redis_password=strong,  # type: ignore[arg-type]
             deployment_district_name="Configured District",
+            data_encryption_key=strong,  # type: ignore[arg-type]
+            lookup_hmac_key=strong,  # type: ignore[arg-type]
+            storage_secret_key=strong,  # type: ignore[arg-type]
+            malware_scanner="clamav",
         )
     )
     r = TestClient(app).get("/api/v1/health/live")
@@ -130,9 +134,7 @@ def test_validation_errors_do_not_echo_submitted_values(client: TestClient) -> N
     assert "input" not in detail
 
 
-def test_unhandled_errors_are_generic_and_logged(
-    client: TestClient, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_unhandled_errors_are_generic_and_logged(client: TestClient, caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.ERROR, logger="app.errors"):
         r = client.get("/api/v1/_probe/crash")
     assert r.status_code == 500
@@ -141,29 +143,30 @@ def test_unhandled_errors_are_generic_and_logged(
     assert any(rec.message == "unhandled_exception" for rec in caplog.records)
 
 
-def test_readiness_ok_when_all_checks_pass(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_readiness_ok_when_all_checks_pass(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         system_router.service,
         "check_database",
         lambda *_: [CheckResult(n, True, 1.0) for n in ("database", "postgis", "migrations")],
     )
-    monkeypatch.setattr(
-        system_router.service, "check_redis", lambda *_: CheckResult("redis", True, 1.0)
-    )
+    monkeypatch.setattr(system_router.service, "check_redis", lambda *_: CheckResult("redis", True, 1.0))
+    monkeypatch.setattr(system_router.service, "check_storage", lambda: CheckResult("object_storage", True, 1.0))
     monkeypatch.setattr(system_router, "get_engine", lambda: None)
     monkeypatch.setattr(system_router, "get_redis", lambda: None)
     r = client.get("/api/v1/health/ready")
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "ok"
-    assert set(body["components"]) == {"database", "postgis", "migrations", "redis"}
+    assert set(body["components"]) == {
+        "database",
+        "postgis",
+        "migrations",
+        "redis",
+        "object_storage",
+    }
 
 
-def test_readiness_503_when_a_dependency_fails(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_readiness_503_when_a_dependency_fails(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         system_router.service,
         "check_database",
@@ -203,9 +206,7 @@ def test_system_info_reports_configured_identity(env: pytest.MonkeyPatch) -> Non
     assert body["deployment"]["state_name"] == "State"
 
 
-def test_access_log_omits_query_string(
-    client: TestClient, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_access_log_omits_query_string(client: TestClient, caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.INFO, logger="app.access"):
         client.get("/api/v1/health/live?citizen=SensitiveName")
     records = [r for r in caplog.records if r.name == "app.access"]

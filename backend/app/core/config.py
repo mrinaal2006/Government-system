@@ -97,7 +97,63 @@ class Settings(BaseSettings):
     # --- Health checks ---------------------------------------------------------------
     health_check_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
 
-    @field_validator("allowed_hosts", "cors_allowed_origins", mode="before")
+    # --- Sessions and authentication (Phase 2) --------------------------------------
+    session_cookie_name: str = "dgi_session"
+    csrf_cookie_name: str = "dgi_csrf"
+    session_cookie_secure: bool | None = None  # None -> secure outside development/test
+    session_absolute_timeout_minutes: int = Field(default=720, ge=5, le=1440)
+    session_idle_timeout_minutes: int = Field(default=30, ge=5, le=480)
+    login_rate_limit_per_minute: int = Field(default=10, ge=1, le=1000)
+    api_rate_limit_per_minute: int = Field(default=600, ge=10)
+    lockout_threshold: int = Field(default=5, ge=3, le=20)
+    lockout_minutes: int = Field(default=15, ge=1, le=1440)
+    password_min_length: int = Field(default=12, ge=10, le=128)
+    mfa_issuer: str = "DG-IMEWS"
+    # Roles that must use MFA before any other action (codes from iam.roles).
+    mfa_required_roles: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: [
+            "super_admin",
+            "district_magistrate",
+            "additional_district_magistrate",
+            "auditor",
+        ]
+    )
+
+    # --- Encryption of sensitive data at rest (application layer) -------------------
+    data_encryption_key: SecretStr = SecretStr("")
+    data_encryption_previous_keys: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    lookup_hmac_key: SecretStr = SecretStr("")
+
+    # --- Object storage (S3-compatible, private) -------------------------------------
+    storage_endpoint: str = "localhost:3900"
+    storage_access_key: str = ""
+    storage_secret_key: SecretStr = SecretStr("")
+    storage_bucket: str = "dgimews-files"
+    storage_region: str = "garage"
+    storage_secure: bool = False
+    upload_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1024)
+
+    # --- Malware scanning --------------------------------------------------------------
+    malware_scanner: str = "none"  # "clamav" or "none" (none is refused in production)
+    clamav_host: str = "clamav"
+    clamav_port: int = 3310
+
+    # --- Grievances --------------------------------------------------------------------
+    grievance_reference_prefix: str = "DGI"
+
+    # --- GIS ---------------------------------------------------------------------------
+    map_tile_url: str | None = None  # optional basemap; boundaries render without it
+
+    # --- Monitoring -----------------------------------------------------------------------
+    metrics_token: SecretStr = SecretStr("")
+
+    @field_validator(
+        "allowed_hosts",
+        "cors_allowed_origins",
+        "mfa_required_roles",
+        "data_encryption_previous_keys",
+        mode="before",
+    )
     @classmethod
     def _parse_csv(cls, value: object) -> object:
         return _split_csv(value)
@@ -108,6 +164,9 @@ class Settings(BaseSettings):
         "deployment_state_name",
         "deployment_state_name_local",
         "database_migration_user",
+        "map_tile_url",
+        "session_cookie_secure",
+        "expose_api_docs",
         mode="before",
     )
     @classmethod
@@ -144,12 +203,13 @@ class Settings(BaseSettings):
         }
         if self.database_migration_password is not None:
             secrets["DATABASE_MIGRATION_PASSWORD"] = self.database_migration_password
+        secrets["DATA_ENCRYPTION_KEY"] = self.data_encryption_key
+        secrets["LOOKUP_HMAC_KEY"] = self.lookup_hmac_key
+        secrets["STORAGE_SECRET_KEY"] = self.storage_secret_key
         for name, secret in secrets.items():
             raw = secret.get_secret_value()
             if len(raw) < MIN_PRODUCTION_SECRET_LENGTH:
-                problems.append(
-                    f"{name} must be at least {MIN_PRODUCTION_SECRET_LENGTH} characters"
-                )
+                problems.append(f"{name} must be at least {MIN_PRODUCTION_SECRET_LENGTH} characters")
             elif any(marker in raw.lower() for marker in PLACEHOLDER_MARKERS):
                 problems.append(f"{name} looks like a placeholder value")
         if self.log_level == "DEBUG":
@@ -160,6 +220,10 @@ class Settings(BaseSettings):
             problems.append("CORS_ALLOWED_ORIGINS must not contain '*'")
         if not self.deployment_district_name:
             problems.append("DEPLOYMENT_DISTRICT_NAME must be configured")
+        if self.session_cookie_secure is False:
+            problems.append("SESSION_COOKIE_SECURE must not be false in staging/production")
+        if self.malware_scanner != "clamav":
+            problems.append("MALWARE_SCANNER must be 'clamav' in staging/production")
         if problems:
             raise ValueError("Unsafe configuration: " + "; ".join(problems))
         return self
@@ -168,6 +232,12 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env == Environment.PRODUCTION
+
+    @property
+    def cookies_secure(self) -> bool:
+        if self.session_cookie_secure is not None:
+            return self.session_cookie_secure
+        return self.app_env not in (Environment.DEVELOPMENT, Environment.TEST)
 
     @property
     def api_docs_enabled(self) -> bool:

@@ -66,9 +66,7 @@ class BoundaryDataset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "boundary_datasets"
     __table_args__ = (
         UniqueConstraint("name", "dataset_version"),
-        CheckConstraint(
-            "checksum_sha256 IS NULL OR checksum_sha256 ~ '^[0-9a-f]{64}$'", name="checksum_format"
-        ),
+        CheckConstraint("checksum_sha256 IS NULL OR checksum_sha256 ~ '^[0-9a-f]{64}$'", name="checksum_format"),
         {"schema": SCHEMA_REFERENCE, "comment": "Provenance of verified geographic datasets"},
     )
 
@@ -89,16 +87,10 @@ class BoundaryDataset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class AdministrativeUnitMixin(UUIDPrimaryKeyMixin, TimestampMixin, ActiveFlagMixin):
     """Columns shared by every administrative unit table."""
 
-    lgd_code: Mapped[str | None] = mapped_column(
-        String(16), comment="Local Government Directory code, when assigned"
-    )
+    lgd_code: Mapped[str | None] = mapped_column(String(16), comment="Local Government Directory code, when assigned")
     name_en: Mapped[str] = mapped_column(String(200), nullable=False)
-    name_local: Mapped[str | None] = mapped_column(
-        String(200), comment="Name in the official local language/script"
-    )
-    boundary: Mapped[Any | None] = mapped_column(
-        Geometry("MULTIPOLYGON", srid=SRID_WGS84, spatial_index=False)
-    )
+    name_local: Mapped[str | None] = mapped_column(String(200), comment="Name in the official local language/script")
+    boundary: Mapped[Any | None] = mapped_column(Geometry("MULTIPOLYGON", srid=SRID_WGS84, spatial_index=False))
 
     @declared_attr
     def geometry_dataset_id(cls) -> Mapped[uuid.UUID | None]:
@@ -107,9 +99,7 @@ class AdministrativeUnitMixin(UUIDPrimaryKeyMixin, TimestampMixin, ActiveFlagMix
     @classmethod
     def unit_table_args(cls, table: str, *extra: Any) -> tuple[Any, ...]:
         return (
-            CheckConstraint(
-                f"lgd_code IS NULL OR lgd_code ~ '{LGD_CODE_PATTERN}'", name="lgd_code_format"
-            ),
+            CheckConstraint(f"lgd_code IS NULL OR lgd_code ~ '{LGD_CODE_PATTERN}'", name="lgd_code_format"),
             CheckConstraint("length(btrim(name_en)) > 0", name="name_en_not_blank"),
             CheckConstraint(
                 "boundary IS NULL OR geometry_dataset_id IS NOT NULL",
@@ -136,9 +126,7 @@ class AdministrativeUnitMixin(UUIDPrimaryKeyMixin, TimestampMixin, ActiveFlagMix
 
 class District(AdministrativeUnitMixin, Base):
     __tablename__ = "districts"
-    __table_args__ = AdministrativeUnitMixin.unit_table_args(
-        "districts", UniqueConstraint("state_name_en", "name_en")
-    )
+    __table_args__ = AdministrativeUnitMixin.unit_table_args("districts", UniqueConstraint("state_name_en", "name_en"))
 
     state_name_en: Mapped[str] = mapped_column(String(200), nullable=False)
     state_lgd_code: Mapped[str | None] = mapped_column(String(16))
@@ -152,9 +140,7 @@ class Subdivision(AdministrativeUnitMixin, Base):
         Index("ix_subdivisions_district_id", "district_id"),
     )
 
-    district_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), _fk("districts.id"), nullable=False
-    )
+    district_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), _fk("districts.id"), nullable=False)
 
 
 class Block(AdministrativeUnitMixin, Base):
@@ -166,12 +152,8 @@ class Block(AdministrativeUnitMixin, Base):
         Index("ix_blocks_subdivision_id", "subdivision_id"),
     )
 
-    district_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), _fk("districts.id"), nullable=False
-    )
-    subdivision_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), _fk("subdivisions.id")
-    )
+    district_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), _fk("districts.id"), nullable=False)
+    subdivision_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), _fk("subdivisions.id"))
 
 
 class Municipality(AdministrativeUnitMixin, Base):
@@ -186,12 +168,8 @@ class Municipality(AdministrativeUnitMixin, Base):
         Index("ix_municipalities_district_id", "district_id"),
     )
 
-    district_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), _fk("districts.id"), nullable=False
-    )
-    subdivision_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), _fk("subdivisions.id")
-    )
+    district_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), _fk("districts.id"), nullable=False)
+    subdivision_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), _fk("subdivisions.id"))
     body_type: Mapped[str] = mapped_column(String(40), nullable=False)
 
 
@@ -203,9 +181,7 @@ class GramPanchayat(AdministrativeUnitMixin, Base):
         Index("ix_gram_panchayats_block_id", "block_id"),
     )
 
-    block_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), _fk("blocks.id"), nullable=False
-    )
+    block_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), _fk("blocks.id"), nullable=False)
 
 
 class Village(AdministrativeUnitMixin, Base):
@@ -229,16 +205,10 @@ class Village(AdministrativeUnitMixin, Base):
         ),
     )
 
-    district_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), _fk("districts.id"), nullable=False
-    )
-    subdivision_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), _fk("subdivisions.id")
-    )
+    district_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), _fk("districts.id"), nullable=False)
+    subdivision_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), _fk("subdivisions.id"))
     block_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), _fk("blocks.id"))
-    gram_panchayat_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), _fk("gram_panchayats.id")
-    )
+    gram_panchayat_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), _fk("gram_panchayats.id"))
     census_code: Mapped[str | None] = mapped_column(String(16))
     location: Mapped[Any | None] = mapped_column(
         Geometry("POINT", srid=SRID_WGS84, spatial_index=False),
@@ -254,7 +224,5 @@ class Ward(AdministrativeUnitMixin, Base):
         Index("ix_wards_municipality_id", "municipality_id"),
     )
 
-    municipality_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), _fk("municipalities.id"), nullable=False
-    )
+    municipality_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), _fk("municipalities.id"), nullable=False)
     ward_number: Mapped[str] = mapped_column(String(20), nullable=False)

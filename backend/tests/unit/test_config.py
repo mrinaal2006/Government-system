@@ -12,6 +12,10 @@ def _prod(**overrides: object) -> Settings:
         "database_password": STRONG,
         "redis_password": STRONG + "r",
         "deployment_district_name": "Configured District",
+        "data_encryption_key": STRONG + "d",
+        "lookup_hmac_key": STRONG + "h",
+        "storage_secret_key": STRONG + "s",
+        "malware_scanner": "clamav",
     }
     values.update(overrides)
     return Settings(**values)  # type: ignore[arg-type]
@@ -119,3 +123,11 @@ def test_blank_identity_values_mean_not_configured(env: pytest.MonkeyPatch) -> N
 def test_blank_district_name_still_fails_production(env: pytest.MonkeyPatch) -> None:
     with pytest.raises(ValidationError, match="DEPLOYMENT_DISTRICT_NAME"):
         _prod(deployment_district_name="  ")
+
+
+def test_blank_optional_booleans_mean_default(env: pytest.MonkeyPatch) -> None:
+    env.setenv("SESSION_COOKIE_SECURE", "")
+    env.setenv("EXPOSE_API_DOCS", "")
+    s = Settings()
+    assert s.session_cookie_secure is None and s.cookies_secure is False  # development default
+    assert s.expose_api_docs is None

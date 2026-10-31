@@ -67,9 +67,7 @@ class ServiceUnavailableError(AppError):
     message = "A required service is temporarily unavailable."
 
 
-def error_body(
-    code: str, message: str, details: list[dict[str, Any]] | None = None
-) -> dict[str, Any]:
+def error_body(code: str, message: str, details: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     return {
         "error": {
             "code": code,

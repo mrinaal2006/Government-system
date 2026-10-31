@@ -12,7 +12,6 @@ from alembic import context
 from sqlalchemy import create_engine, pool
 
 from app.core.config import get_settings
-from app.db.base import SCHEMA_REFERENCE
 from app.db.models import Base
 
 config = context.config
@@ -20,7 +19,7 @@ if config.config_file_name is not None and config.attributes.get("configure_logg
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
-MANAGED_SCHEMAS = {SCHEMA_REFERENCE}
+MANAGED_SCHEMAS = {"ref", "iam", "audit", "citizen", "grievance", "intel", "perf", "governance"}
 
 
 def include_object(obj, name, type_, reflected, compare_to):  # type: ignore[no-untyped-def]

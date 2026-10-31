@@ -21,6 +21,7 @@ def test_readiness_ok_against_real_services(migrated: Settings) -> None:
         "postgis": "ok",
         "migrations": "ok",
         "redis": "ok",
+        "object_storage": "ok",
     }
 
 

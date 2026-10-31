@@ -67,12 +67,8 @@ def _uuid_pk() -> sa.Column:
 
 def _timestamps() -> list[sa.Column]:
     return [
-        sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
-        ),
-        sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
-        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     ]
 
 
@@ -109,9 +105,7 @@ def _unit_columns() -> list[sa.Column]:
         ),
         sa.Column(
             "boundary",
-            geoalchemy2.types.Geometry(
-                geometry_type="MULTIPOLYGON", srid=4326, spatial_index=False
-            ),
+            geoalchemy2.types.Geometry(geometry_type="MULTIPOLYGON", srid=4326, spatial_index=False),
             nullable=True,
         ),
         sa.Column("geometry_dataset_id", postgresql.UUID(as_uuid=True), nullable=True),
@@ -130,9 +124,7 @@ def _unit_constraints(table: str) -> list[sa.Constraint]:
             "boundary IS NULL OR geometry_dataset_id IS NOT NULL",
             name=f"ck_{table}_boundary_requires_dataset",
         ),
-        sa.CheckConstraint(
-            "boundary IS NULL OR ST_IsValid(boundary)", name=f"ck_{table}_boundary_is_valid"
-        ),
+        sa.CheckConstraint("boundary IS NULL OR ST_IsValid(boundary)", name=f"ck_{table}_boundary_is_valid"),
         _fk(table, "geometry_dataset_id", "boundary_datasets"),
     ]
 
@@ -146,9 +138,7 @@ def _unit_indexes(table: str) -> None:
         schema=SCHEMA,
         postgresql_where=sa.text("lgd_code IS NOT NULL"),
     )
-    op.create_index(
-        f"ix_{table}_boundary", table, ["boundary"], schema=SCHEMA, postgresql_using="gist"
-    )
+    op.create_index(f"ix_{table}_boundary", table, ["boundary"], schema=SCHEMA, postgresql_using="gist")
     op.create_index(
         f"ix_{table}_name_en_trgm",
         table,
@@ -183,9 +173,7 @@ def _grant_runtime_role() -> None:
     quoted = bind.dialect.identifier_preparer.quote(role)
     op.execute(f"GRANT USAGE ON SCHEMA {SCHEMA} TO {quoted}")
     op.execute(f"GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA {SCHEMA} TO {quoted}")
-    op.execute(
-        f"ALTER DEFAULT PRIVILEGES IN SCHEMA {SCHEMA} GRANT SELECT, INSERT, UPDATE ON TABLES TO {quoted}"
-    )
+    op.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA {SCHEMA} GRANT SELECT, INSERT, UPDATE ON TABLES TO {quoted}")
     op.execute(f"GRANT EXECUTE ON FUNCTION public.dgimews_set_updated_at() TO {quoted}")
     # Read-only access so the readiness probe can confirm the schema is at head.
     op.execute(f"GRANT SELECT ON public.alembic_version TO {quoted}")
@@ -229,9 +217,7 @@ def upgrade() -> None:
         sa.Column("verified_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("verification_notes", sa.Text(), nullable=True),
         sa.PrimaryKeyConstraint("id", name="pk_boundary_datasets"),
-        sa.UniqueConstraint(
-            "name", "dataset_version", name="uq_boundary_datasets_name_dataset_version"
-        ),
+        sa.UniqueConstraint("name", "dataset_version", name="uq_boundary_datasets_name_dataset_version"),
         sa.CheckConstraint(
             "checksum_sha256 IS NULL OR checksum_sha256 ~ '^[0-9a-f]{64}$'",
             name="ck_boundary_datasets_checksum_format",
@@ -296,15 +282,11 @@ def upgrade() -> None:
         _fk("municipalities", "district_id", "districts"),
         _fk("municipalities", "subdivision_id", "subdivisions"),
         sa.UniqueConstraint("district_id", "name_en", name="uq_municipalities_district_id_name_en"),
-        sa.CheckConstraint(
-            _in("body_type", body_types), name="ck_municipalities_body_type_allowed"
-        ),
+        sa.CheckConstraint(_in("body_type", body_types), name="ck_municipalities_body_type_allowed"),
         schema=SCHEMA,
     )
     _unit_indexes("municipalities")
-    op.create_index(
-        "ix_municipalities_district_id", "municipalities", ["district_id"], schema=SCHEMA
-    )
+    op.create_index("ix_municipalities_district_id", "municipalities", ["district_id"], schema=SCHEMA)
 
     op.create_table(
         "gram_panchayats",
@@ -344,9 +326,7 @@ def upgrade() -> None:
         schema=SCHEMA,
     )
     _unit_indexes("villages")
-    op.create_index(
-        "ix_villages_location", "villages", ["location"], schema=SCHEMA, postgresql_using="gist"
-    )
+    op.create_index("ix_villages_location", "villages", ["location"], schema=SCHEMA, postgresql_using="gist")
     for col in ("district_id", "block_id", "gram_panchayat_id", "subdivision_id"):
         op.create_index(f"ix_villages_{col}", "villages", [col], schema=SCHEMA)
     op.create_index(
@@ -365,9 +345,7 @@ def upgrade() -> None:
         sa.Column("ward_number", sa.String(20), nullable=False),
         *_unit_constraints("wards"),
         _fk("wards", "municipality_id", "municipalities"),
-        sa.UniqueConstraint(
-            "municipality_id", "ward_number", name="uq_wards_municipality_id_ward_number"
-        ),
+        sa.UniqueConstraint("municipality_id", "ward_number", name="uq_wards_municipality_id_ward_number"),
         schema=SCHEMA,
     )
     _unit_indexes("wards")
@@ -387,9 +365,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name="pk_departments"),
         sa.UniqueConstraint("code", name="uq_departments_code"),
         sa.CheckConstraint(f"code ~ '{CODE_PATTERN}'", name="ck_departments_code_format"),
-        sa.CheckConstraint(
-            "parent_id IS NULL OR parent_id <> id", name="ck_departments_not_own_parent"
-        ),
+        sa.CheckConstraint("parent_id IS NULL OR parent_id <> id", name="ck_departments_not_own_parent"),
         _fk("departments", "parent_id", "departments"),
         schema=SCHEMA,
     )
@@ -424,16 +400,12 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name="pk_issue_categories"),
         sa.UniqueConstraint("code", name="uq_issue_categories_code"),
         sa.CheckConstraint(f"code ~ '{CODE_PATTERN}'", name="ck_issue_categories_code_format"),
-        sa.CheckConstraint(
-            "parent_id IS NULL OR parent_id <> id", name="ck_issue_categories_not_own_parent"
-        ),
+        sa.CheckConstraint("parent_id IS NULL OR parent_id <> id", name="ck_issue_categories_not_own_parent"),
         _fk("issue_categories", "parent_id", "issue_categories"),
         _fk("issue_categories", "default_department_id", "departments"),
         schema=SCHEMA,
     )
-    op.create_index(
-        "ix_issue_categories_parent_id", "issue_categories", ["parent_id"], schema=SCHEMA
-    )
+    op.create_index("ix_issue_categories_parent_id", "issue_categories", ["parent_id"], schema=SCHEMA)
     op.create_index(
         "ix_issue_categories_default_department_id",
         "issue_categories",
@@ -470,9 +442,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name="pk_grievance_sources"),
         sa.UniqueConstraint("code", name="uq_grievance_sources_code"),
         sa.CheckConstraint(f"code ~ '{CODE_PATTERN}'", name="ck_grievance_sources_code_format"),
-        sa.CheckConstraint(
-            _in("channel_type", channel_types), name="ck_grievance_sources_channel_type_allowed"
-        ),
+        sa.CheckConstraint(_in("channel_type", channel_types), name="ck_grievance_sources_channel_type_allowed"),
         sa.CheckConstraint(
             _in("integration_mode", integration_modes),
             name="ck_grievance_sources_integration_mode_allowed",

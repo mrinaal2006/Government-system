@@ -16,6 +16,15 @@ dependencies = [
     "pydantic-settings==2.16.2",
     "redis==6.4.0",
     "celery[redis]==5.6.3",
+    "argon2-cffi==25.1.0",
+    "pyotp==2.10.0",
+    "cryptography==50.0.2",
+    "email-validator>=2.2,<3",
+    "minio==7.2.20",
+    "openpyxl==3.1.5",
+    "reportlab==5.1.0",
+    "python-multipart==0.0.32",
+    "prometheus-client==0.26.0",
 ]
 
 [project.optional-dependencies]
@@ -44,12 +53,12 @@ markers = [
 filterwarnings = ["error::DeprecationWarning:app.*"]
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S", "BLE", "A", "C4", "SIM", "RUF"]
-ignore = ["S101"]  # assert is fine in tests
+ignore = ["S101", "E501"]  # assert is fine in tests; line length is owned by ruff format
 
 [tool.ruff.lint.isort]
 known-third-party = ["alembic"]
@@ -70,5 +79,5 @@ module = ["app.worker.*"]
 disallow_untyped_decorators = false
 
 [[tool.mypy.overrides]]
-module = ["celery.*", "geoalchemy2.*", "kombu.*"]
+module = ["celery.*", "geoalchemy2.*", "kombu.*", "pyotp.*", "minio.*", "openpyxl.*", "reportlab.*"]
 ignore_missing_imports = true

@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse
 
 from app.api.deps import get_app_settings
@@ -30,17 +30,17 @@ from app.modules.system.schemas import (
 )
 
 router = APIRouter(tags=["system"])
-_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="health")
+_executor = ThreadPoolExecutor(max_workers=6, thread_name_prefix="health")
 
 
-@router.api_route(
-    "/health/live",
-    methods=["GET", "HEAD"],
-    response_model=LivenessResponse,
-    summary="Liveness probe",
-)
+@router.get("/health/live", response_model=LivenessResponse, summary="Liveness probe")
 def liveness() -> LivenessResponse:
     return LivenessResponse()
+
+
+@router.head("/health/live", include_in_schema=False)
+def liveness_head() -> Response:
+    return Response(status_code=200)
 
 
 @router.get(
@@ -53,32 +53,51 @@ def readiness(settings: Annotated[Settings, Depends(get_app_settings)]) -> JSONR
     timeout = settings.health_check_timeout_seconds
     db_future = _executor.submit(service.check_database, get_engine(), timeout)
     redis_future = _executor.submit(service.check_redis, get_redis())
+    storage_future = _executor.submit(service.check_storage)
 
     results = []
     try:
         results.extend(db_future.result(timeout=timeout + 1))
     except TimeoutError:
         results.extend(
-            service.CheckResult(n, False, timeout * 1000, "timeout")
-            for n in ("database", "postgis", "migrations")
+            service.CheckResult(n, False, timeout * 1000, "timeout") for n in ("database", "postgis", "migrations")
         )
     try:
         results.append(redis_future.result(timeout=timeout + 1))
     except TimeoutError:
         results.append(service.CheckResult("redis", False, timeout * 1000, "timeout"))
+    try:
+        results.append(storage_future.result(timeout=timeout + 1))
+    except TimeoutError:
+        results.append(service.CheckResult("object_storage", False, timeout * 1000, "timeout"))
 
     healthy = all(r.ok for r in results)
     body = ReadinessResponse(
         status="ok" if healthy else "unavailable",
         checked_at=datetime.now(UTC).isoformat(),
         components={
-            r.name: ComponentStatus(
-                status="ok" if r.ok else "unavailable", latency_ms=r.latency_ms, reason=r.reason
-            )
+            r.name: ComponentStatus(status="ok" if r.ok else "unavailable", latency_ms=r.latency_ms, reason=r.reason)
             for r in results
         },
     )
     return JSONResponse(body.model_dump(), status_code=200 if healthy else 503)
+
+
+@router.get("/system/metrics", include_in_schema=False)
+def metrics(request: Request, s: Annotated[Settings, Depends(get_app_settings)]) -> Response:
+    """Prometheus metrics. Requires the METRICS_TOKEN bearer token; nginx also blocks
+    this path from outside so only the internal monitoring network can reach it."""
+    import hmac
+
+    from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+
+    from app.core.errors import PermissionDeniedError
+
+    token = s.metrics_token.get_secret_value()
+    supplied = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    if not token or not hmac.compare_digest(token, supplied):
+        raise PermissionDeniedError()
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @router.get("/system/info", response_model=SystemInfoResponse, summary="Deployment metadata")

@@ -90,3 +90,12 @@ def check_redis(client: redis.Redis) -> CheckResult:
         return None if client.ping() else "no_pong"
 
     return _timed("redis", ping)
+
+
+def check_storage() -> CheckResult:
+    from app.infra import storage
+
+    def bucket() -> str | None:
+        return None if storage.ping() else "bucket_missing"
+
+    return _timed("object_storage", bucket)

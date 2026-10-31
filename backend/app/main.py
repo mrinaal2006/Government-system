@@ -14,6 +14,7 @@ from app.api.v1.router import api_router
 from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
+from app.core.metrics import MetricsMiddleware
 from app.core.middleware import RequestContextMiddleware, SecurityHeadersMiddleware
 
 API_PREFIX = "/api/v1"
@@ -62,6 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.is_production)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
+    app.add_middleware(MetricsMiddleware)
     app.add_middleware(RequestContextMiddleware)
 
     app.include_router(api_router, prefix=API_PREFIX)

@@ -93,9 +93,7 @@ class SecurityHeadersMiddleware:
                         continue  # Swagger UI needs scripts/styles; docs are off in production
                     headers.setdefault(key, value)
                 if self.hsts:
-                    headers.setdefault(
-                        "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
-                    )
+                    headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
             await send(message)
 
         await self.app(scope, receive, send_wrapper)

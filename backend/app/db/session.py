@@ -27,9 +27,7 @@ def build_engine(settings: Settings, *, url: str | None = None) -> Engine:
         connect_args={
             "connect_timeout": 5,
             "application_name": settings.app_name,
-            "options": (
-                f"-c timezone=UTC -c statement_timeout={settings.database_statement_timeout_ms}"
-            ),
+            "options": (f"-c timezone=UTC -c statement_timeout={settings.database_statement_timeout_ms}"),
         },
     )
 

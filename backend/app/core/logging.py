@@ -77,9 +77,7 @@ class ConsoleFormatter(logging.Formatter):
 
 def configure_logging(settings: Settings) -> None:
     handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(
-        JsonFormatter() if settings.log_format == LogFormat.JSON else ConsoleFormatter()
-    )
+    handler.setFormatter(JsonFormatter() if settings.log_format == LogFormat.JSON else ConsoleFormatter())
     root = logging.getLogger()
     root.handlers = [handler]
     root.setLevel(settings.log_level)

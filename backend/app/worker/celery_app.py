@@ -6,6 +6,7 @@ Run: ``celery -A app.worker.celery_app worker --loglevel=INFO``
 from __future__ import annotations
 
 from celery import Celery
+from celery.schedules import crontab
 from celery.signals import setup_logging
 
 from app.core.config import get_settings
@@ -33,6 +34,15 @@ celery_app.conf.update(
     result_expires=3600,
     broker_connection_retry_on_startup=True,
     worker_hijack_root_logger=False,
+    beat_schedule={
+        "sla-scan": {"task": "sla.scan", "schedule": 600.0},
+        "alerts-evaluate": {"task": "alerts.evaluate", "schedule": 900.0},
+        "sweep": {"task": "system.sweep", "schedule": 300.0},
+        "performance-snapshot": {
+            "task": "perf.snapshot",
+            "schedule": crontab(minute=30, hour=19),
+        },  # 01:00 IST
+    },
 )
 
 

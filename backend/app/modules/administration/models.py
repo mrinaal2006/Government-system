@@ -107,9 +107,7 @@ class GrievanceSource(UUIDPrimaryKeyMixin, TimestampMixin, ActiveFlagMixin, Base
     __table_args__ = (
         CheckConstraint(f"code ~ '{CODE_PATTERN}'", name="code_format"),
         CheckConstraint(_in("channel_type", SOURCE_CHANNEL_TYPES), name="channel_type_allowed"),
-        CheckConstraint(
-            _in("integration_mode", SOURCE_INTEGRATION_MODES), name="integration_mode_allowed"
-        ),
+        CheckConstraint(_in("integration_mode", SOURCE_INTEGRATION_MODES), name="integration_mode_allowed"),
         {"schema": SCHEMA_REFERENCE},
     )
 
@@ -117,7 +115,5 @@ class GrievanceSource(UUIDPrimaryKeyMixin, TimestampMixin, ActiveFlagMixin, Base
     name_en: Mapped[str] = mapped_column(String(200), nullable=False)
     name_local: Mapped[str | None] = mapped_column(String(200))
     channel_type: Mapped[str] = mapped_column(String(40), nullable=False)
-    integration_mode: Mapped[str] = mapped_column(
-        String(40), nullable=False, server_default=text("'not_configured'")
-    )
+    integration_mode: Mapped[str] = mapped_column(String(40), nullable=False, server_default=text("'not_configured'"))
     description: Mapped[str | None] = mapped_column(Text)
