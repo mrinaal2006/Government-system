@@ -1,0 +1,86 @@
+/*
+ * DG-IMEWS design tokens (government administrative identity).
+ *
+ * Semantic tokens only: components never use raw hex values. Every text/background
+ * pair used by components is checked for WCAG 2.1 AA contrast by
+ * src/design-system/tokens.test.ts, which parses this file.
+ *
+ * Palette: institutional navy, white, light grey, dark charcoal, restrained
+ * saffron (decorative accents only: #e07b00 is exactly 3:1 on white, so it is
+ * never used for text) and restrained green (success).
+ */
+
+@theme {
+  --font-sans: "Noto Sans", "Noto Sans Devanagari", Arial, "Helvetica Neue", system-ui, sans-serif;
+
+  --color-page: #f4f5f7;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f6f7f9;
+  --color-ink: #1d2125;
+  --color-ink-muted: #4b525a;
+  --color-line: #c4cad1;
+  --color-line-strong: #6b737c;
+
+  --color-brand: #0b2e59;
+  --color-brand-hover: #133f75;
+  --color-brand-deep: #071d3a;
+  --color-brand-soft: #e3eaf4;
+  --color-on-brand: #ffffff;
+  --color-on-brand-muted: #d0d7e2;
+
+  --color-accent: #e07b00;
+  --color-accent-ink: #9a4f00;
+  --color-accent-soft: #fff4e5;
+
+  --color-link: #1c4f8f;
+  --color-success: #136b35;
+  --color-success-soft: #e8f5ec;
+  --color-danger: #b3261e;
+  --color-danger-soft: #fdecea;
+  --color-warning: #7a4a00;
+  --color-warning-soft: #fff6e0;
+
+  --color-focus: #b45309;
+  --color-focus-on-dark: #ffb84d;
+
+  --radius-sm: 2px;
+  --radius-md: 3px;
+}
+
+/* High-contrast mode (Accessibility controls). Pure black/white with a yellow
+   focus indicator; brand colour is replaced so no text relies on tinted fills. */
+:root[data-contrast="high"] {
+  --color-page: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-muted: #ffffff;
+  --color-ink: #000000;
+  --color-ink-muted: #000000;
+  --color-line: #000000;
+  --color-line-strong: #000000;
+  --color-brand: #000000;
+  --color-brand-hover: #000000;
+  --color-brand-deep: #000000;
+  --color-brand-soft: #ffffff;
+  --color-on-brand: #ffffff;
+  --color-on-brand-muted: #ffffff;
+  --color-accent: #ffff00;
+  --color-accent-ink: #000000;
+  --color-accent-soft: #ffffff;
+  --color-link: #0000ee;
+  --color-success: #000000;
+  --color-success-soft: #ffffff;
+  --color-danger: #a00000;
+  --color-danger-soft: #ffffff;
+  --color-warning: #000000;
+  --color-warning-soft: #ffffff;
+  --color-focus: #000000;
+  --color-focus-on-dark: #ffff00;
+}
+
+/* Text size control: Tailwind sizes are rem-based, so scaling the root scales the UI. */
+:root[data-text-scale="large"] {
+  font-size: 112.5%;
+}
+:root[data-text-scale="larger"] {
+  font-size: 125%;
+}

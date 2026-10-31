@@ -1,0 +1,189 @@
+# DG-IMEWS - base Compose stack (development and single-host deployments).
+#
+#   cp .env.example .env    # then replace every CHANGE_ME value
+#   docker compose up -d --build
+#
+# Networks:
+#   edge - web (nginx) <-> api only. web is the only service with a published port.
+#   data - internal network for api, worker, migrate, db, redis (no external access).
+# docker-compose.dev.yml additionally publishes db/redis/api on 127.0.0.1 for local
+# development and integration tests.
+
+name: dgimews
+
+x-build-common: &build-common
+  network: ${BUILD_NETWORK:-default}
+  secrets: [build_ca]
+  args:
+    HTTPS_PROXY: ${BUILD_HTTPS_PROXY:-}
+
+x-backend-env: &backend-env
+  APP_ENV: ${APP_ENV:-development}
+  APP_VERSION: ${APP_VERSION:-0.1.0}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_FORMAT: ${LOG_FORMAT:-json}
+  ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,api}
+  DEPLOYMENT_DISTRICT_NAME: ${DEPLOYMENT_DISTRICT_NAME:-}
+  DEPLOYMENT_DISTRICT_NAME_LOCAL: ${DEPLOYMENT_DISTRICT_NAME_LOCAL:-}
+  DEPLOYMENT_STATE_NAME: ${DEPLOYMENT_STATE_NAME:-}
+  DEPLOYMENT_STATE_NAME_LOCAL: ${DEPLOYMENT_STATE_NAME_LOCAL:-}
+  DATABASE_HOST: db
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: ${DATABASE_NAME:-dgimews}
+  DATABASE_USER: ${DATABASE_APP_USER:-dgimews_app}
+  DATABASE_PASSWORD: ${DATABASE_APP_PASSWORD:?set DATABASE_APP_PASSWORD in .env}
+  DATABASE_APP_ROLE: ${DATABASE_APP_USER:-dgimews_app}
+  DATABASE_SSLMODE: ${DATABASE_SSLMODE:-prefer}
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?set POSTGRES_SUPERUSER_PASSWORD in .env}
+      POSTGRES_DB: ${DATABASE_NAME:-dgimews}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --encoding=UTF8 --locale=C.UTF-8"
+      DB_MIGRATOR_USER: ${DATABASE_MIGRATION_USER:-dgimews_migrator}
+      DB_MIGRATOR_PASSWORD: ${DATABASE_MIGRATION_PASSWORD:?set DATABASE_MIGRATION_PASSWORD in .env}
+      DB_APP_USER: ${DATABASE_APP_USER:-dgimews_app}
+      DB_APP_PASSWORD: ${DATABASE_APP_PASSWORD:?set DATABASE_APP_PASSWORD in .env}
+      DB_CREATE_TEST_DATABASE: ${DB_CREATE_TEST_DATABASE:-false}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    command: >
+      postgres
+      -c timezone=UTC
+      -c log_timezone=UTC
+      -c password_encryption=scram-sha-256
+      -c log_connections=on
+      -c log_disconnections=on
+      -c log_min_duration_statement=1000
+      -c shared_preload_libraries=pg_stat_statements
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [data]
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    # The password is written to a config file at start so it does not appear in
+    # the process list. Dangerous administrative commands are disabled.
+    command:
+      - sh
+      - -c
+      - |
+        umask 077
+        printf 'requirepass "%s"\n' "$$REDIS_PASSWORD" > /tmp/redis.conf
+        cat >> /tmp/redis.conf <<'CONF'
+        appendonly yes
+        protected-mode yes
+        maxmemory-policy noeviction
+        rename-command FLUSHALL ""
+        rename-command FLUSHDB ""
+        rename-command DEBUG ""
+        rename-command CONFIG ""
+        CONF
+        exec redis-server /tmp/redis.conf
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [data]
+
+  migrate:
+    build:
+      context: ./backend
+      <<: *build-common
+    image: dgimews-backend:${APP_VERSION:-0.1.0}
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      <<: *backend-env
+      DATABASE_MIGRATION_USER: ${DATABASE_MIGRATION_USER:-dgimews_migrator}
+      DATABASE_MIGRATION_PASSWORD: ${DATABASE_MIGRATION_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    networks: [data]
+
+  api:
+    image: dgimews-backend:${APP_VERSION:-0.1.0}
+    restart: unless-stopped
+    environment: *backend-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    networks: [data, edge]
+
+  worker:
+    image: dgimews-backend:${APP_VERSION:-0.1.0}
+    restart: unless-stopped
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    environment: *backend-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.worker.celery_app inspect ping -d celery@$$HOSTNAME --timeout 5 | grep -q pong"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 20s
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    networks: [data]
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/nginx/Dockerfile
+      <<: *build-common
+    image: dgimews-web:${APP_VERSION:-0.1.0}
+    restart: unless-stopped
+    ports:
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    networks: [edge]
+
+networks:
+  data:
+    internal: true
+  edge: {}
+
+volumes:
+  pgdata: {}
+  redisdata: {}
+
+secrets:
+  build_ca:
+    file: ${BUILD_CA_BUNDLE:-./infra/build/no-extra-ca.pem}

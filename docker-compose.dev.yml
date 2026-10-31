@@ -1,0 +1,29 @@
+# Development override: publishes PostgreSQL, Redis and the API on 127.0.0.1 only,
+# and creates the <DATABASE_NAME>_test database used by integration tests.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#
+# Never use this file in staging or production.
+
+services:
+  db:
+    environment:
+      DB_CREATE_TEST_DATABASE: "true"
+    ports:
+      - "127.0.0.1:${DEV_DB_PORT:-55432}:5432"
+    networks: [data, devhost]
+
+  redis:
+    ports:
+      - "127.0.0.1:${DEV_REDIS_PORT:-56379}:6379"
+    networks: [data, devhost]
+
+  api:
+    environment:
+      EXPOSE_API_DOCS: "true"
+    ports:
+      - "127.0.0.1:${DEV_API_PORT:-58000}:8000"
+    networks: [data, edge, devhost]
+
+networks:
+  devhost: {}
