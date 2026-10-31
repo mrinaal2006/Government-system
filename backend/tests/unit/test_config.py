@@ -143,3 +143,51 @@ def test_malware_scan_mode_validated(env: pytest.MonkeyPatch) -> None:
     assert Settings(malware_scan_mode="deferred").malware_scan_mode == "deferred"
     with pytest.raises(ValidationError):
         Settings(malware_scan_mode="sometimes")  # type: ignore[arg-type]
+
+
+def test_vercel_deployment_hosts_are_allowed_automatically(env: pytest.MonkeyPatch) -> None:
+    env.setenv("ALLOWED_HOSTS", "grievance.example.gov.in")
+    env.setenv("VERCEL", "1")
+    env.setenv("VERCEL_URL", "dg-imews-abc123-team.vercel.app")
+    env.setenv("VERCEL_BRANCH_URL", "dg-imews-git-main-team.vercel.app")
+    env.setenv("VERCEL_PROJECT_PRODUCTION_URL", "https://dg-imews.vercel.app/")
+    assert Settings().allowed_hosts == [
+        "grievance.example.gov.in",
+        "dg-imews-abc123-team.vercel.app",
+        "dg-imews-git-main-team.vercel.app",
+        "dg-imews.vercel.app",
+    ]
+
+
+def test_vercel_hosts_ignored_off_vercel_or_when_malformed(env: pytest.MonkeyPatch) -> None:
+    env.setenv("ALLOWED_HOSTS", "a.example")
+    env.setenv("VERCEL_URL", "x.vercel.app")
+    assert Settings().allowed_hosts == ["a.example"]  # VERCEL not set
+    env.setenv("VERCEL", "1")
+    env.setenv("VERCEL_URL", "*")
+    env.setenv("VERCEL_BRANCH_URL", "evil example.com")
+    assert Settings().allowed_hosts == ["a.example"]
+
+
+def test_vercel_preview_host_passes_host_and_origin_checks(env: pytest.MonkeyPatch) -> None:
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    env.setenv("ALLOWED_HOSTS", "grievance.example.gov.in")
+    env.setenv("VERCEL", "1")
+    env.setenv("VERCEL_URL", "dg-imews-abc123-team.vercel.app")
+    c = TestClient(
+        create_app(Settings()), base_url="https://dg-imews-abc123-team.vercel.app", raise_server_exceptions=False
+    )
+    assert c.get("/api/v1/health/live").status_code == 200
+    r = c.post(
+        "/api/v1/auth/login",
+        json={"username": "x", "password": "y"},
+        headers={"Origin": "https://dg-imews-abc123-team.vercel.app"},
+    )
+    assert r.status_code != 400 and (r.status_code != 403 or r.json()["error"]["code"] != "permission_denied")
+    other = TestClient(
+        create_app(Settings()), base_url="https://someone-else.vercel.app", raise_server_exceptions=False
+    )
+    assert other.get("/api/v1/health/live").status_code == 400

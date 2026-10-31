@@ -9,6 +9,7 @@ weak secrets.
 from __future__ import annotations
 
 import os
+import re
 from enum import StrEnum
 from functools import lru_cache
 from typing import Annotated, Literal, Self
@@ -17,6 +18,7 @@ from urllib.parse import quote
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+_HOSTNAME = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$")
 PLACEHOLDER_MARKERS = ("change_me", "changeme", "replace_me", "example", "password")
 MIN_PRODUCTION_SECRET_LENGTH = 16
 
@@ -201,6 +203,24 @@ class Settings(BaseSettings):
         if value not in allowed:
             raise ValueError(f"database_sslmode must be one of {sorted(allowed)}")
         return value
+
+    @model_validator(mode="after")
+    def _add_vercel_deployment_hosts(self) -> Self:
+        """On Vercel, accept the addresses Vercel reports for this deployment.
+
+        Every preview deployment gets its own *.vercel.app address, which cannot be listed
+        in ALLOWED_HOSTS in advance. Vercel sets these variables itself (they are not user
+        input); only syntactically valid host names are added. Custom domains must still be
+        listed in ALLOWED_HOSTS.
+        """
+        if os.environ.get("VERCEL") != "1":
+            return self
+        for var in ("VERCEL_URL", "VERCEL_BRANCH_URL", "VERCEL_PROJECT_PRODUCTION_URL"):
+            host = os.environ.get(var, "").strip().lower()
+            host = host.split("://", 1)[-1].split("/", 1)[0].split(":", 1)[0]
+            if _HOSTNAME.fullmatch(host) and host not in self.allowed_hosts:
+                self.allowed_hosts.append(host)
+        return self
 
     @model_validator(mode="after")
     def _enforce_production_rules(self) -> Self:

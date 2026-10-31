@@ -77,7 +77,10 @@ Everything in `docs/configuration.md` applies. Vercel-specific values:
 
 * `APP_ENV=production`, `SESSION_COOKIE_SECURE=true`, `MALWARE_SCANNER=clamav`,
   `MALWARE_SCAN_MODE=deferred`, `REDIS_TLS=true`
-* `ALLOWED_HOSTS=<your-domain>,<project>.vercel.app` (also used to accept the sign-in Origin)
+* `ALLOWED_HOSTS=<your-custom-domain>` (also used to accept the sign-in Origin). The deployment's own
+  `*.vercel.app` addresses (including every preview deployment) are added automatically from
+  Vercel's `VERCEL_URL`, `VERCEL_BRANCH_URL` and `VERCEL_PROJECT_PRODUCTION_URL`; keep
+  "Automatically expose System Environment Variables" enabled in the project settings
 * `CLIENT_IP_HEADER=x-real-ip` so rate limits, lockout and suspicious-login detection see the
   real client address (Vercel overwrites this header; do not set it behind other proxies)
 * `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`,
