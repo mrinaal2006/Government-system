@@ -27,6 +27,17 @@ export function RequestAccessPage() {
   const set = (k: keyof typeof EMPTY) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
 
   if (opts.isLoading) return <AuthLayout title="Request access"><LoadingState /></AuthLayout>;
+  if (opts.isError) {
+    return (
+      <AuthLayout title="Request access">
+        <Alert tone="danger" title="The sign-up service could not be reached.">
+          {errorMessage(opts.error)} If this continues, the server may not be fully set up (database connection or migrations).
+        </Alert>
+        <p className="mt-4"><Button variant="secondary" onClick={() => void opts.refetch()}>Try again</Button></p>
+        <p className="mt-4"><Link to="/login" className="text-link underline">Back to sign in</Link></p>
+      </AuthLayout>
+    );
+  }
   if (!opts.data?.officer_signup_enabled) {
     return (
       <AuthLayout title="Request access">

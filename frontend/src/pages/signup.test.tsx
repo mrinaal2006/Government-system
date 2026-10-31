@@ -22,7 +22,7 @@ describe("Officer access request", () => {
       },
     });
     const { container } = renderApp("/login");
-    await userEvent.click(await screen.findByRole("link", { name: "Request access" }));
+    await userEvent.click(await screen.findByRole("link", { name: "Sign up / request access" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Request access" })).toBeInTheDocument();
     await noAxeViolations(container);
     await userEvent.type(screen.getByLabelText(/Username/), "Asha.K");
@@ -41,6 +41,28 @@ describe("Officer access request", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Request submitted" })).toBeInTheDocument();
     expect(sent).toMatchObject({ username: "asha.k", requested_role: "department_officer", department_id: null });
     expect(sent).not.toHaveProperty("confirm");
+  });
+});
+
+describe("Sign-up link", () => {
+  it("stays visible when the options call fails, and the form explains the failure", async () => {
+    mockApi({
+      "/api/v1/auth/me": anonymous,
+      "/api/v1/auth/signup/options": () => jsonResponse({ error: { code: "internal_error", message: "Server error" } }, 500),
+    });
+    renderApp("/login");
+    await userEvent.click(await screen.findByRole("link", { name: "Sign up / request access" }));
+    expect(await screen.findByText("The sign-up service could not be reached.")).toBeInTheDocument();
+  });
+
+  it("is hidden only when the server turns officer sign-up off", async () => {
+    mockApi({
+      "/api/v1/auth/me": anonymous,
+      "/api/v1/auth/signup/options": () => jsonResponse({ officer_signup_enabled: false, citizen_portal_enabled: false, roles: [], departments: [] }),
+    });
+    renderApp("/login");
+    await screen.findByRole("heading", { level: 1, name: "Sign in" });
+    await waitFor(() => expect(screen.queryByRole("link", { name: "Sign up / request access" })).not.toBeInTheDocument());
   });
 });
 

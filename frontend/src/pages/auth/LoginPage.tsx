@@ -55,20 +55,19 @@ export function LoginPage() {
           Sign in
         </Button>
       </form>
-      {signup.data?.officer_signup_enabled || signup.data?.citizen_portal_enabled ? (
-        <div className="mt-6 border-t border-line pt-4 text-sm">
-          {signup.data.officer_signup_enabled ? (
-            <p className="m-0 mb-2">
-              New official? <Link to="/request-access" className="text-link underline">Request access</Link>
-            </p>
-          ) : null}
-          {signup.data.citizen_portal_enabled ? (
-            <p className="m-0">
-              Citizen? <Link to="/citizen" className="text-link underline">File or track a grievance on the citizen portal</Link>
-            </p>
-          ) : null}
-        </div>
-      ) : null}
+      {/* Shown unless the server explicitly turns them off, so a slow or failing options call never hides sign-up. */}
+      <div className="mt-6 border-t border-line pt-4 text-sm">
+        {signup.data?.officer_signup_enabled !== false ? (
+          <p className="m-0 mb-2">
+            New official? <Link to="/request-access" className="text-link underline">Sign up / request access</Link>
+          </p>
+        ) : null}
+        {signup.data?.citizen_portal_enabled ? (
+          <p className="m-0">
+            Citizen? <Link to="/citizen" className="text-link underline">File or track a grievance on the citizen portal</Link>
+          </p>
+        ) : null}
+      </div>
     </AuthLayout>
   );
 }
